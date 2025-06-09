@@ -58,7 +58,13 @@ router.post('/create', async (req, res) => {
         if (existingRound) {
             return res.status(400).json({ error: 'Ya tienes una partida activa' });
         }
-        
+
+        // Buscar el usuario para obtener su información de consentimiento
+        const users = require('../data/users'); // Asegúrate de que la ruta y el archivo existen
+        const user = users.find(u => u.email === hostEmail);
+        const emailConsent = user ? user.emailConsent : false;
+        const unsubscribeToken = user ? user.unsubscribeToken : '';
+
         // Crear nueva partida/sesión
         const newRound = {
             code: code,
@@ -80,9 +86,9 @@ router.post('/create', async (req, res) => {
         
         rounds.push(newRound);
         
-        // Enviar código por email al host junto con su contraseña
+        // Enviar código por email al host con información de consentimiento
         if (hostPassword) {
-            emailUtils.sendRoundCodeEmail(hostEmail, code, hostPassword);
+            emailUtils.sendRoundCodeEmail(hostEmail, code, hostPassword, emailConsent, unsubscribeToken);
         }
         
         console.log(`Partida creada con código: ${code} por ${hostEmail}`);
