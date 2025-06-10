@@ -2,9 +2,7 @@ const express = require('express');
 const router = express.Router();
 const emailUtils = require('../utils/email');
 const bcrypt = require('bcryptjs');
-
-// Simulación de una lista de usuarios registrados
-let users = [];
+const sharedData = require('../data/shared');
 
 router.post('/signup', async (req, res) => {
     try {
@@ -16,7 +14,7 @@ router.post('/signup', async (req, res) => {
         }
         
         // Verificar si el usuario ya existe
-        if (users.some(u => u.email === email)) {
+        if (sharedData.getUserByEmail(email)) {
             return res.status(400).json({ error: 'El correo electrónico ya está registrado' });
         }
         
@@ -40,7 +38,7 @@ router.post('/signup', async (req, res) => {
             createdAt: new Date()
         };
         
-        users.push(newUser);
+        sharedData.addUser(newUser);
         
         // Enviar email de confirmación con información de consentimiento
         emailUtils.sendConfirmationEmail(email, verificationCode, {
@@ -48,7 +46,7 @@ router.post('/signup', async (req, res) => {
             unsubscribeToken: unsubscribeToken
         });
         
-        console.log(`Usuario registrado: ${email}, Código: ${verificationCode}, Consentimiento: ${emailConsent}`);
+        console.log(`✅ Usuario registrado: ${email}, Código: ${verificationCode}, Consentimiento: ${emailConsent}`);
         res.json({ 
             success: true, 
             message: 'Usuario registrado correctamente',
@@ -56,7 +54,7 @@ router.post('/signup', async (req, res) => {
         });
         
     } catch (error) {
-        console.error('Error in signup:', error);
+        console.error('❌ Error in signup:', error);
         res.status(500).json({ error: 'Error interno del servidor' });
     }
 });
@@ -70,7 +68,7 @@ router.post('/verify', (req, res) => {
             return res.status(400).json({ error: 'Email y código de verificación son requeridos' });
         }
         
-        const user = users.find(u => u.email === email);
+        const user = sharedData.getUserByEmail(email);
         if (!user) {
             return res.status(404).json({ error: 'Usuario no encontrado' });
         }
@@ -80,9 +78,13 @@ router.post('/verify', (req, res) => {
         }
         
         if (user.verificationCode === verificationCode) {
-            user.verified = true;
-            user.verifiedAt = new Date();
-            console.log(`Usuario verificado: ${email}`);
+            // Actualizar usuario como verificado
+            sharedData.updateUser(email, {
+                verified: true,
+                verifiedAt: new Date()
+            });
+            
+            console.log(`✅ Usuario verificado: ${email}`);
             res.json({ 
                 success: true, 
                 message: 'Usuario verificado correctamente',
@@ -93,7 +95,7 @@ router.post('/verify', (req, res) => {
         }
         
     } catch (error) {
-        console.error('Error in verify:', error);
+        console.error('❌ Error in verify:', error);
         res.status(500).json({ error: 'Error interno del servidor' });
     }
 });
@@ -107,7 +109,7 @@ router.post('/login', async (req, res) => {
             return res.status(400).json({ error: 'Email y contraseña son requeridos' });
         }
         
-        const user = users.find(u => u.email === email);
+        const user = sharedData.getUserByEmail(email);
         
         if (!user) {
             return res.status(401).json({ error: 'Correo electrónico o contraseña incorrectos' });
@@ -119,7 +121,7 @@ router.post('/login', async (req, res) => {
         
         const isPasswordValid = await bcrypt.compare(password, user.password);
         if (isPasswordValid) {
-            console.log(`Usuario autenticado: ${email}`);
+            console.log(`✅ Usuario autenticado: ${email}`);
             res.json({ 
                 success: true, 
                 message: 'Login exitoso',
@@ -130,25 +132,28 @@ router.post('/login', async (req, res) => {
         }
         
     } catch (error) {
-        console.error('Error in login:', error);
+        console.error('❌ Error in login:', error);
         res.status(500).json({ error: 'Error interno del servidor' });
     }
 });
 
-// NUEVO: Endpoint para darse de baja de emails
+// Endpoint para darse de baja de emails
 router.get('/unsubscribe/:token', (req, res) => {
     try {
         const { token } = req.params;
         
-        const user = users.find(u => u.unsubscribeToken === token);
+        const user = sharedData.getAllUsers().find(u => u.unsubscribeToken === token);
         if (!user) {
             return res.status(404).json({ error: 'Token de baja no válido' });
         }
         
-        user.emailConsent = false;
-        user.unsubscribeDate = new Date();
+        // Actualizar consentimiento
+        sharedData.updateUser(user.email, {
+            emailConsent: false,
+            unsubscribeDate: new Date()
+        });
         
-        console.log(`Usuario ${user.email} se dio de baja de emails`);
+        console.log(`📧 Usuario ${user.email} se dio de baja de emails`);
         
         // Enviar página HTML de confirmación
         res.send(`
@@ -173,12 +178,12 @@ router.get('/unsubscribe/:token', (req, res) => {
         `);
         
     } catch (error) {
-        console.error('Error in unsubscribe:', error);
+        console.error('❌ Error in unsubscribe:', error);
         res.status(500).json({ error: 'Error interno del servidor' });
     }
 });
 
-// NUEVO: Endpoint para volver a suscribirse
+// Endpoint para volver a suscribirse
 router.post('/resubscribe', (req, res) => {
     try {
         const { email } = req.body;
@@ -187,30 +192,32 @@ router.post('/resubscribe', (req, res) => {
             return res.status(400).json({ error: 'Email es requerido' });
         }
         
-        const user = users.find(u => u.email === email);
+        const user = sharedData.getUserByEmail(email);
         if (!user) {
             return res.status(404).json({ error: 'Usuario no encontrado' });
         }
         
-        user.emailConsent = true;
-        user.consentDate = new Date();
-        delete user.unsubscribeDate;
+        // Actualizar consentimiento
+        sharedData.updateUser(email, {
+            emailConsent: true,
+            consentDate: new Date()
+        });
         
-        console.log(`Usuario ${email} se volvió a suscribir a emails`);
+        console.log(`📧 Usuario ${email} se volvió a suscribir a emails`);
         res.json({ 
             success: true, 
             message: 'Te has vuelto a suscribir exitosamente'
         });
         
     } catch (error) {
-        console.error('Error in resubscribe:', error);
+        console.error('❌ Error in resubscribe:', error);
         res.status(500).json({ error: 'Error interno del servidor' });
     }
 });
 
-// Endpoint para debug (eliminar en producción)
+// Endpoint para debug y estadísticas
 router.get('/users', (req, res) => {
-    const safeUsers = users.map(u => ({
+    const safeUsers = sharedData.getAllUsers().map(u => ({
         email: u.email,
         verified: u.verified,
         emailConsent: u.emailConsent,
@@ -218,6 +225,11 @@ router.get('/users', (req, res) => {
         createdAt: u.createdAt
     }));
     res.json(safeUsers);
+});
+
+// Endpoint para estadísticas del sistema
+router.get('/stats', (req, res) => {
+    res.json(sharedData.getStats());
 });
 
 // Función para generar token único de baja
