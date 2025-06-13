@@ -1,20 +1,31 @@
-// routes/rounds.js - COMPLETO con todos los endpoints
 const express = require('express');
 const router = express.Router();
 const emailUtils = require('../utils/email');
-const sharedData = require('../data/shared');
+
+// Simulación de una lista de partidas/sesiones
+let rounds = [];
 
 // Configuración de tableros predefinidos (10 tableros de 3x3)
 const PREDEFINED_BOARDS = [
+    // Tablero 1
     [[12, 6, 10], [5, 2, 18], [24, 16, 1]],
+    // Tablero 2
     [[9, 8, 17], [23, 20, 7], [15, 4, 14]],
+    // Tablero 3
     [[5, 22, 19], [13, 12, 11], [21, 3, 1]],
+    // Tablero 4
     [[10, 7, 14], [1, 23, 16], [21, 8, 17]],
+    // Tablero 5
     [[13, 20, 18], [15, 11, 2], [9, 5, 6]],
+    // Tablero 6
     [[4, 13, 16], [3, 8, 12], [19, 21, 20]],
+    // Tablero 7
     [[5, 18, 10], [11, 7, 22], [19, 14, 15]],
+    // Tablero 8
     [[3, 17, 2], [9, 6, 12], [20, 21, 24]],
+    // Tablero 9
     [[7, 5, 18], [16, 17, 15], [14, 13, 1]],
+    // Tablero 10
     [[15, 8, 3], [19, 11, 6], [24, 4, 22]]
 ];
 
@@ -24,33 +35,33 @@ router.post('/create', async (req, res) => {
         
         console.log(`🎯 Creando partida: ${code} para ${hostEmail}`);
         
+        // Validar que se proporcione un código
         if (!code) {
             return res.status(400).json({ error: 'Código de partida es requerido' });
         }
         
+        // Validar formato del código (6 caracteres alfanuméricos)
         if (!/^[A-Z0-9]{6}$/.test(code)) {
             return res.status(400).json({ error: 'El código debe tener exactamente 6 caracteres alfanuméricos' });
         }
         
-        if (sharedData.getRoundByCode(code)) {
+        // Verificar si el código ya existe
+        if (rounds.some(r => r.code === code)) {
             return res.status(400).json({ error: 'El código de la partida ya existe' });
         }
         
+        // Validar email del host
         if (!hostEmail) {
             return res.status(400).json({ error: 'Email del host es requerido' });
         }
         
-        const existingRounds = sharedData.getRoundsByHost(hostEmail);
-        const activeRound = existingRounds.find(r => r.status !== 'finished');
-        if (activeRound) {
+        // Verificar si el host ya tiene una partida activa
+        const existingRound = rounds.find(r => r.hostEmail === hostEmail && r.status !== 'finished');
+        if (existingRound) {
             return res.status(400).json({ error: 'Ya tienes una partida activa' });
         }
-
-        const user = sharedData.getUserByEmail(hostEmail);
-        const emailConsent = user ? user.emailConsent : false;
-        const unsubscribeToken = user ? user.unsubscribeToken : '';
-
-        // MEJORADO: Estructura más detallada para el seguimiento de cartas
+        
+        // Crear nueva partida/sesión
         const newRound = {
             code: code,
             hostEmail: hostEmail,
@@ -62,40 +73,39 @@ router.post('/create', async (req, res) => {
                 email: hostEmail,
                 joinedAt: new Date()
             },
-            boards: PREDEFINED_BOARDS.slice(0, maxPlayers),
-            takenBoards: [],
+            boards: PREDEFINED_BOARDS.slice(0, maxPlayers), // Asignar tableros según maxPlayers
+            takenBoards: [], // Array para rastrear tableros ocupados
+            calledNumbers: [],
+            currentNumber: null,
             
-            // MEJORADO: Mejor tracking de cartas
-            calledNumbers: [],        // Array ordenado de cartas llamadas
-            currentNumber: null,      // Último número llamado
-            lastCardTime: null,       // Timestamp de la última carta
-            cardHistory: [],          // Historial detallado con timestamps
-            totalCardsAvailable: 24,  // Total de cartas disponibles
-            gameStartTime: null,      // Cuando empezó el juego
+            // NUEVOS CAMPOS para mejor tracking
+            lastCardTime: null,
+            cardHistory: [],
+            totalCardsAvailable: 24,
+            gameStartTime: null,
             
             gameState: 'lobby' // lobby, playing, paused, ended
         };
         
-        sharedData.addRound(newRound);
+        rounds.push(newRound);
         
-        try {
-            if (hostPassword) {
-                console.log(`📧 Enviando email de partida a: ${hostEmail}`);
-                emailUtils.sendRoundCodeEmail(hostEmail, code, hostPassword, emailConsent, unsubscribeToken);
+        // Enviar código por email al host junto con su contraseña
+        if (hostPassword) {
+            try {
+                emailUtils.sendRoundCodeEmail(hostEmail, code, hostPassword);
+            } catch (emailError) {
+                console.log(`⚠️  Error enviando email (no crítico): ${emailError.message}`);
             }
-        } catch (emailError) {
-            console.log(`⚠️  Error enviando email (no crítico): ${emailError.message}`);
         }
         
-        console.log(`✅ Partida creada: ${code} por ${hostEmail}`);
+        console.log(`✅ Partida creada con código: ${code} por ${hostEmail}`);
         res.json({ 
             success: true, 
             message: 'Partida creada correctamente',
             code: code,
-            roundId: sharedData.getAllRounds().length - 1,
+            roundId: rounds.length - 1,
             maxPlayers: newRound.maxPlayers,
-            boards: newRound.boards.length,
-            gameState: newRound.gameState
+            boards: newRound.boards.length
         });
         
     } catch (error) {
@@ -106,7 +116,6 @@ router.post('/create', async (req, res) => {
 
 router.get('/list', (req, res) => {
     try {
-        const rounds = sharedData.getAllRounds();
         const safeRounds = rounds.map(r => ({
             code: r.code,
             createdAt: r.createdAt,
@@ -115,8 +124,9 @@ router.get('/list', (req, res) => {
             maxPlayers: r.maxPlayers,
             gameState: r.gameState,
             hostEmail: r.hostEmail,
-            totalCalled: r.calledNumbers.length,
-            currentNumber: r.currentNumber
+            // NUEVOS CAMPOS para CardDisplayScene
+            totalCalled: r.calledNumbers ? r.calledNumbers.length : 0,
+            currentNumber: r.currentNumber || null
         }));
         res.json(safeRounds);
     } catch (error) {
@@ -128,7 +138,7 @@ router.get('/list', (req, res) => {
 router.get('/:code', (req, res) => {
     try {
         const { code } = req.params;
-        const round = sharedData.getRoundByCode(code);
+        const round = rounds.find(r => r.code === code);
         
         if (!round) {
             return res.status(404).json({ error: 'Partida no encontrada' });
@@ -148,8 +158,9 @@ router.get('/:code', (req, res) => {
             })),
             hostEmail: round.hostEmail,
             takenBoards: round.takenBoards,
-            totalCalled: r.calledNumbers.length,
-            currentNumber: r.currentNumber
+            // NUEVOS CAMPOS para CardDisplayScene
+            totalCalled: round.calledNumbers ? round.calledNumbers.length : 0,
+            currentNumber: round.currentNumber || null
         });
     } catch (error) {
         console.error('❌ Error getting round:', error);
@@ -166,7 +177,7 @@ router.post('/:code/join', (req, res) => {
             return res.status(400).json({ error: 'Nombre del jugador es requerido' });
         }
         
-        const round = sharedData.getRoundByCode(code);
+        const round = rounds.find(r => r.code === code);
         if (!round) {
             return res.status(404).json({ error: 'Partida no encontrada' });
         }
@@ -183,9 +194,12 @@ router.post('/:code/join', (req, res) => {
             return res.status(400).json({ error: 'El nombre del jugador ya está en uso' });
         }
         
+        // Validar selección de tablero
         let boardIndex = selectedBoardIndex;
         
+        // Si no se especificó tablero o el especificado está ocupado, asignar automáticamente
         if (boardIndex === undefined || boardIndex === null || round.takenBoards.includes(boardIndex)) {
+            // Encontrar el primer tablero disponible
             boardIndex = -1;
             for (let i = 0; i < round.maxPlayers; i++) {
                 if (!round.takenBoards.includes(i)) {
@@ -199,10 +213,12 @@ router.post('/:code/join', (req, res) => {
             }
         }
         
+        // Validar que el índice del tablero sea válido
         if (boardIndex < 0 || boardIndex >= round.boards.length) {
             return res.status(400).json({ error: 'Índice de tablero inválido' });
         }
         
+        // Verificar nuevamente que el tablero no esté ocupado
         if (round.takenBoards.includes(boardIndex)) {
             return res.status(400).json({ error: 'El tablero seleccionado ya está ocupado' });
         }
@@ -219,9 +235,9 @@ router.post('/:code/join', (req, res) => {
         };
         
         round.players.push(newPlayer);
-        round.takenBoards.push(boardIndex);
+        round.takenBoards.push(boardIndex); // Marcar tablero como ocupado
         
-        console.log(`👤 Jugador ${playerName} se unió a ${code} con tablero ${boardIndex}`);
+        console.log(`👤 Jugador ${playerName} se unió a la partida ${code} con tablero ${boardIndex}`);
         res.json({ 
             success: true, 
             message: 'Te has unido a la partida correctamente',
@@ -241,7 +257,7 @@ router.post('/:code/start', (req, res) => {
         const { code } = req.params;
         const { hostEmail } = req.body;
         
-        const round = sharedData.getRoundByCode(code);
+        const round = rounds.find(r => r.code === code);
         if (!round) {
             return res.status(404).json({ error: 'Partida no encontrada' });
         }
@@ -254,12 +270,10 @@ router.post('/:code/start', (req, res) => {
             return res.status(400).json({ error: 'Se necesitan al menos 3 jugadores para comenzar' });
         }
         
-        // Actualizar estado de la partida
-        sharedData.updateRound(code, {
-            status: 'active',
-            gameState: 'playing',
-            startedAt: new Date()
-        });
+        round.status = 'active';
+        round.gameState = 'playing';
+        round.startedAt = new Date();
+        round.gameStartTime = new Date(); // NUEVO campo
         
         console.log(`🚀 Partida ${code} iniciada por ${hostEmail} con ${round.players.length} jugadores`);
         res.json({ 
@@ -277,7 +291,7 @@ router.post('/:code/start', (req, res) => {
 router.get('/:code/boards', (req, res) => {
     try {
         const { code } = req.params;
-        const round = sharedData.getRoundByCode(code);
+        const round = rounds.find(r => r.code === code);
         
         if (!round) {
             return res.status(404).json({ error: 'Partida no encontrada' });
@@ -304,10 +318,11 @@ router.get('/:code/boards', (req, res) => {
     }
 });
 
+// Endpoint para que el host vea jugadores en tiempo real
 router.get('/:code/players', (req, res) => {
     try {
         const { code } = req.params;
-        const round = sharedData.getRoundByCode(code);
+        const round = rounds.find(r => r.code === code);
         
         if (!round) {
             return res.status(404).json({ error: 'Partida no encontrada' });
@@ -332,6 +347,7 @@ router.get('/:code/players', (req, res) => {
     }
 });
 
+// MEJORADO: Endpoint para que el host envíe una carta
 router.post('/:code/call-card', (req, res) => {
     try {
         const { code } = req.params;
@@ -339,7 +355,7 @@ router.post('/:code/call-card', (req, res) => {
         
         console.log(`🎴 Carta ${calledCard} solicitada para partida ${code} por ${hostEmail}`);
         
-        const round = sharedData.getRoundByCode(code);
+        const round = rounds.find(r => r.code === code);
         if (!round) {
             return res.status(404).json({ error: 'Partida no encontrada' });
         }
@@ -348,7 +364,7 @@ router.post('/:code/call-card', (req, res) => {
             return res.status(403).json({ error: 'Solo el host puede llamar cartas' });
         }
         
-        // MEJORADO: Permitir llamar cartas incluso si el estado no es 'active'
+        // MEJORADO: Permitir llamar cartas incluso si no está en 'active' para flexibilidad
         if (round.status === 'finished') {
             return res.status(400).json({ error: 'La partida ya ha terminado' });
         }
@@ -375,7 +391,8 @@ router.post('/:code/call-card', (req, res) => {
         round.currentNumber = calledCard;
         round.lastCardTime = now;
         
-        // Agregar al historial detallado
+        // NUEVO: Agregar al historial detallado
+        if (!round.cardHistory) round.cardHistory = [];
         round.cardHistory.push({
             cardNumber: calledCard,
             timestamp: now,
@@ -391,14 +408,14 @@ router.post('/:code/call-card', (req, res) => {
             console.log(`🚀 Partida ${code} iniciada automáticamente al llamar primera carta`);
         }
         
-        // MEJORADO: Verificar si se han llamado todas las cartas
-        const allCardsCalled = round.calledNumbers.length >= round.totalCardsAvailable;
+        // NUEVO: Verificar si se han llamado todas las cartas
+        const allCardsCalled = round.calledNumbers.length >= (round.totalCardsAvailable || 24);
         if (allCardsCalled) {
             round.gameState = 'completed';
             console.log(`🏁 Todas las cartas han sido llamadas en partida ${code}`);
         }
         
-        console.log(`✅ Carta ${calledCard} llamada en partida ${code} (${round.calledNumbers.length}/${round.totalCardsAvailable})`);
+        console.log(`✅ Carta ${calledCard} llamada en partida ${code} (${round.calledNumbers.length}/${round.totalCardsAvailable || 24})`);
         
         res.json({ 
             success: true, 
@@ -406,7 +423,7 @@ router.post('/:code/call-card', (req, res) => {
             totalCalled: round.calledNumbers.length,
             calledNumbers: round.calledNumbers,
             currentNumber: round.currentNumber,
-            maxCards: round.totalCardsAvailable,
+            maxCards: round.totalCardsAvailable || 24,
             gameState: round.gameState,
             lastCardTime: round.lastCardTime,
             allCardsCalled: allCardsCalled
@@ -418,10 +435,11 @@ router.post('/:code/call-card', (req, res) => {
     }
 });
 
+// MEJORADO: Endpoint para obtener estado del juego
 router.get('/:code/status', (req, res) => {
     try {
         const { code } = req.params;
-        const round = sharedData.getRoundByCode(code);
+        const round = rounds.find(r => r.code === code);
         
         if (!round) {
             return res.status(404).json({ error: 'Partida no encontrada' });
@@ -434,16 +452,16 @@ router.get('/:code/status', (req, res) => {
             gameState: round.gameState,
             
             // Información de cartas
-            calledNumbers: round.calledNumbers,
-            currentNumber: round.currentNumber,
-            totalCalled: round.calledNumbers.length,
-            maxNumbers: round.totalCardsAvailable,
-            remainingCards: round.totalCardsAvailable - round.calledNumbers.length,
-            lastCardTime: round.lastCardTime,
+            calledNumbers: round.calledNumbers || [],
+            currentNumber: round.currentNumber || null,
+            totalCalled: round.calledNumbers ? round.calledNumbers.length : 0,
+            maxNumbers: round.totalCardsAvailable || 24,
+            remainingCards: (round.totalCardsAvailable || 24) - (round.calledNumbers ? round.calledNumbers.length : 0),
+            lastCardTime: round.lastCardTime || null,
             
             // Información de tiempo
             createdAt: round.createdAt,
-            gameStartTime: round.gameStartTime,
+            gameStartTime: round.gameStartTime || null,
             
             // Información de jugadores
             playerCount: round.players.length,
@@ -451,13 +469,13 @@ router.get('/:code/status', (req, res) => {
             
             // Estado del juego
             winner: round.winner || null,
-            allCardsCalled: round.calledNumbers.length >= round.totalCardsAvailable,
-            canCallMoreCards: round.calledNumbers.length < round.totalCardsAvailable && round.status !== 'finished'
+            allCardsCalled: (round.calledNumbers ? round.calledNumbers.length : 0) >= (round.totalCardsAvailable || 24),
+            canCallMoreCards: (round.calledNumbers ? round.calledNumbers.length : 0) < (round.totalCardsAvailable || 24) && round.status !== 'finished'
         };
         
         // NUEVO: Agregar historial de cartas si se solicita
         if (req.query.includeHistory === 'true') {
-            gameStatus.cardHistory = round.cardHistory;
+            gameStatus.cardHistory = round.cardHistory || [];
         }
         
         res.json(gameStatus);
@@ -468,12 +486,13 @@ router.get('/:code/status', (req, res) => {
     }
 });
 
+// Endpoint para verificar bingo
 router.post('/:code/bingo', (req, res) => {
     try {
         const { code } = req.params;
         const { playerName, markedTiles, playerBoard } = req.body;
         
-        const round = sharedData.getRoundByCode(code);
+        const round = rounds.find(r => r.code === code);
         if (!round) {
             return res.status(404).json({ error: 'Partida no encontrada' });
         }
@@ -486,16 +505,15 @@ router.post('/:code/bingo', (req, res) => {
             return res.status(400).json({ error: 'Ya hay un ganador en esta partida' });
         }
         
+        // Verificar si el bingo es válido
         const isValidBingo = verifyBingo(markedTiles, playerBoard, round.calledNumbers);
         
         if (isValidBingo) {
-            // Actualizar partida con el ganador
-            sharedData.updateRound(code, {
-                winner: playerName,
-                winnerTime: new Date(),
-                status: 'finished',
-                gameState: 'ended'
-            });
+            // Marcar como ganador
+            round.winner = playerName;
+            round.winnerTime = new Date();
+            round.status = 'finished';
+            round.gameState = 'ended';
             
             console.log(`🏆 ¡BINGO! Ganador: ${playerName} en partida ${code}`);
             res.json({ 
@@ -517,12 +535,13 @@ router.post('/:code/bingo', (req, res) => {
     }
 });
 
+// Endpoint para terminar partida
 router.post('/:code/end', (req, res) => {
     try {
         const { code } = req.params;
         const { hostEmail, reason } = req.body;
         
-        const round = sharedData.getRoundByCode(code);
+        const round = rounds.find(r => r.code === code);
         if (!round) {
             return res.status(404).json({ error: 'Partida no encontrada' });
         }
@@ -531,13 +550,10 @@ router.post('/:code/end', (req, res) => {
             return res.status(403).json({ error: 'Solo el host puede terminar la partida' });
         }
         
-        // Actualizar partida como terminada
-        sharedData.updateRound(code, {
-            status: 'finished',
-            gameState: 'ended',
-            endReason: reason || 'host_ended',
-            endTime: new Date()
-        });
+        round.status = 'finished';
+        round.gameState = 'ended';
+        round.endReason = reason || 'host_ended';
+        round.endTime = new Date();
         
         console.log(`🛑 Partida ${code} terminada por el host. Razón: ${reason}`);
         res.json({ 
@@ -555,7 +571,7 @@ router.post('/:code/end', (req, res) => {
 router.get('/:code/card-history', (req, res) => {
     try {
         const { code } = req.params;
-        const round = sharedData.getRoundByCode(code);
+        const round = rounds.find(r => r.code === code);
         
         if (!round) {
             return res.status(404).json({ error: 'Partida no encontrada' });
@@ -563,11 +579,11 @@ router.get('/:code/card-history', (req, res) => {
         
         res.json({
             code: round.code,
-            totalCalled: round.calledNumbers.length,
-            calledNumbers: round.calledNumbers,
+            totalCalled: round.calledNumbers ? round.calledNumbers.length : 0,
+            calledNumbers: round.calledNumbers || [],
             cardHistory: round.cardHistory || [],
-            gameStartTime: round.gameStartTime,
-            lastCardTime: round.lastCardTime
+            gameStartTime: round.gameStartTime || null,
+            lastCardTime: round.lastCardTime || null
         });
         
     } catch (error) {
@@ -576,53 +592,9 @@ router.get('/:code/card-history', (req, res) => {
     }
 });
 
-// NUEVO: Endpoint para resetear cartas (solo para desarrollo/debugging)
-router.post('/:code/reset-cards', (req, res) => {
-    try {
-        const { code } = req.params;
-        const { hostEmail, confirmReset } = req.body;
-        
-        // Solo permitir en desarrollo
-        if (process.env.NODE_ENV === 'production' && !confirmReset) {
-            return res.status(403).json({ error: 'No disponible en producción sin confirmación' });
-        }
-        
-        const round = sharedData.getRoundByCode(code);
-        if (!round) {
-            return res.status(404).json({ error: 'Partida no encontrada' });
-        }
-        
-        if (round.hostEmail !== hostEmail) {
-            return res.status(403).json({ error: 'Solo el host puede resetear cartas' });
-        }
-        
-        // Resetear estado de cartas
-        const previousCount = round.calledNumbers.length;
-        round.calledNumbers = [];
-        round.currentNumber = null;
-        round.lastCardTime = null;
-        round.cardHistory = [];
-        round.gameState = 'lobby';
-        round.status = 'waiting';
-        round.gameStartTime = null;
-        
-        console.log(`🔄 Cartas reseteadas en partida ${code} (${previousCount} cartas eliminadas)`);
-        
-        res.json({
-            success: true,
-            message: 'Cartas reseteadas correctamente',
-            previousCardCount: previousCount,
-            currentCardCount: 0
-        });
-        
-    } catch (error) {
-        console.error('❌ Error resetting cards:', error);
-        res.status(500).json({ error: 'Error interno del servidor' });
-    }
-});
-
-// Función auxiliar para verificar bingo
+// Función auxiliar para verificar bingo - CORREGIDA
 function verifyBingo(markedTiles, playerBoard, calledNumbers) {
+    // Convertir tablero 3x3 a array plano para comparar con markedTiles
     const boardFlat = [];
     for (let row = 0; row < 3; row++) {
         for (let col = 0; col < 3; col++) {
@@ -630,33 +602,36 @@ function verifyBingo(markedTiles, playerBoard, calledNumbers) {
         }
     }
     
+    // Verificar que todos los números marcados hayan sido llamados
     for (let i = 0; i < markedTiles.length; i++) {
         if (markedTiles[i]) {
             const number = boardFlat[i];
             if (!calledNumbers.includes(number)) {
                 console.log(`Número ${number} marcado pero no llamado`);
-                return false;
+                return false; // Número marcado pero no llamado
             }
         }
     }
     
+    // Para ganar, el jugador debe tener TODAS las casillas marcadas
     for (let i = 0; i < markedTiles.length; i++) {
         if (!markedTiles[i]) {
             console.log(`Tablero no completo - casilla ${i} sin marcar`);
-            return false;
+            return false; // El tablero no está completo
         }
     }
     
+    // Verificar que todos los números del tablero hayan sido llamados
     for (let i = 0; i < boardFlat.length; i++) {
         const number = boardFlat[i];
         if (!calledNumbers.includes(number)) {
             console.log(`Número ${number} del tablero no ha sido llamado`);
-            return false;
+            return false; // Hay números en el tablero que no han salido
         }
     }
     
     console.log("✅ ¡BINGO VÁLIDO! Tablero completo y todos los números llamados");
-    return true;
+    return true; // BINGO válido - tablero completo y todos los números llamados
 }
 
 module.exports = router;
