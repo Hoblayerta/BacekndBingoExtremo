@@ -1,4 +1,4 @@
-// routes/rounds.js - MEJORADO con mejor sincronización de cartas
+// routes/rounds.js - COMPLETO con todos los endpoints
 const express = require('express');
 const router = express.Router();
 const emailUtils = require('../utils/email');
@@ -104,6 +104,234 @@ router.post('/create', async (req, res) => {
     }
 });
 
+router.get('/list', (req, res) => {
+    try {
+        const rounds = sharedData.getAllRounds();
+        const safeRounds = rounds.map(r => ({
+            code: r.code,
+            createdAt: r.createdAt,
+            status: r.status,
+            playerCount: r.players.length,
+            maxPlayers: r.maxPlayers,
+            gameState: r.gameState,
+            hostEmail: r.hostEmail,
+            totalCalled: r.calledNumbers.length,
+            currentNumber: r.currentNumber
+        }));
+        res.json(safeRounds);
+    } catch (error) {
+        console.error('❌ Error listing rounds:', error);
+        res.status(500).json({ error: 'Error interno del servidor' });
+    }
+});
+
+router.get('/:code', (req, res) => {
+    try {
+        const { code } = req.params;
+        const round = sharedData.getRoundByCode(code);
+        
+        if (!round) {
+            return res.status(404).json({ error: 'Partida no encontrada' });
+        }
+        
+        res.json({
+            code: round.code,
+            status: round.status,
+            gameState: round.gameState,
+            createdAt: round.createdAt,
+            playerCount: round.players.length,
+            maxPlayers: round.maxPlayers,
+            players: round.players.map(p => ({ 
+                name: p.name, 
+                joinedAt: p.joinedAt, 
+                boardIndex: p.boardIndex 
+            })),
+            hostEmail: round.hostEmail,
+            takenBoards: round.takenBoards,
+            totalCalled: r.calledNumbers.length,
+            currentNumber: r.currentNumber
+        });
+    } catch (error) {
+        console.error('❌ Error getting round:', error);
+        res.status(500).json({ error: 'Error interno del servidor' });
+    }
+});
+
+router.post('/:code/join', (req, res) => {
+    try {
+        const { code } = req.params;
+        const { playerName, playerEmail, selectedBoardIndex } = req.body;
+        
+        if (!playerName) {
+            return res.status(400).json({ error: 'Nombre del jugador es requerido' });
+        }
+        
+        const round = sharedData.getRoundByCode(code);
+        if (!round) {
+            return res.status(404).json({ error: 'Partida no encontrada' });
+        }
+        
+        if (round.status === 'finished') {
+            return res.status(400).json({ error: 'La partida ya ha terminado' });
+        }
+        
+        if (round.players.length >= round.maxPlayers) {
+            return res.status(400).json({ error: 'La partida está llena' });
+        }
+        
+        if (round.players.some(p => p.name === playerName)) {
+            return res.status(400).json({ error: 'El nombre del jugador ya está en uso' });
+        }
+        
+        let boardIndex = selectedBoardIndex;
+        
+        if (boardIndex === undefined || boardIndex === null || round.takenBoards.includes(boardIndex)) {
+            boardIndex = -1;
+            for (let i = 0; i < round.maxPlayers; i++) {
+                if (!round.takenBoards.includes(i)) {
+                    boardIndex = i;
+                    break;
+                }
+            }
+            
+            if (boardIndex === -1) {
+                return res.status(400).json({ error: 'No hay tableros disponibles' });
+            }
+        }
+        
+        if (boardIndex < 0 || boardIndex >= round.boards.length) {
+            return res.status(400).json({ error: 'Índice de tablero inválido' });
+        }
+        
+        if (round.takenBoards.includes(boardIndex)) {
+            return res.status(400).json({ error: 'El tablero seleccionado ya está ocupado' });
+        }
+        
+        const playerBoard = round.boards[boardIndex];
+        
+        const newPlayer = {
+            name: playerName,
+            email: playerEmail || null,
+            joinedAt: new Date(),
+            board: playerBoard,
+            markedNumbers: [],
+            boardIndex: boardIndex
+        };
+        
+        round.players.push(newPlayer);
+        round.takenBoards.push(boardIndex);
+        
+        console.log(`👤 Jugador ${playerName} se unió a ${code} con tablero ${boardIndex}`);
+        res.json({ 
+            success: true, 
+            message: 'Te has unido a la partida correctamente',
+            playerCount: round.players.length,
+            board: playerBoard,
+            boardIndex: boardIndex
+        });
+        
+    } catch (error) {
+        console.error('❌ Error joining round:', error);
+        res.status(500).json({ error: 'Error interno del servidor' });
+    }
+});
+
+router.post('/:code/start', (req, res) => {
+    try {
+        const { code } = req.params;
+        const { hostEmail } = req.body;
+        
+        const round = sharedData.getRoundByCode(code);
+        if (!round) {
+            return res.status(404).json({ error: 'Partida no encontrada' });
+        }
+        
+        if (round.hostEmail !== hostEmail) {
+            return res.status(403).json({ error: 'Solo el host puede iniciar la partida' });
+        }
+        
+        if (round.players.length < 3) {
+            return res.status(400).json({ error: 'Se necesitan al menos 3 jugadores para comenzar' });
+        }
+        
+        // Actualizar estado de la partida
+        sharedData.updateRound(code, {
+            status: 'active',
+            gameState: 'playing',
+            startedAt: new Date()
+        });
+        
+        console.log(`🚀 Partida ${code} iniciada por ${hostEmail} con ${round.players.length} jugadores`);
+        res.json({ 
+            success: true, 
+            message: 'Partida iniciada correctamente',
+            playerCount: round.players.length
+        });
+        
+    } catch (error) {
+        console.error('❌ Error starting round:', error);
+        res.status(500).json({ error: 'Error interno del servidor' });
+    }
+});
+
+router.get('/:code/boards', (req, res) => {
+    try {
+        const { code } = req.params;
+        const round = sharedData.getRoundByCode(code);
+        
+        if (!round) {
+            return res.status(404).json({ error: 'Partida no encontrada' });
+        }
+        
+        res.json({
+            code: round.code,
+            boards: round.boards,
+            takenBoards: round.takenBoards,
+            players: round.players.map(p => ({
+                name: p.name,
+                boardIndex: p.boardIndex,
+                board: p.board
+            })),
+            availableBoards: round.boards.map((board, index) => ({
+                index: index,
+                board: board,
+                available: !round.takenBoards.includes(index)
+            }))
+        });
+    } catch (error) {
+        console.error('❌ Error getting boards:', error);
+        res.status(500).json({ error: 'Error interno del servidor' });
+    }
+});
+
+router.get('/:code/players', (req, res) => {
+    try {
+        const { code } = req.params;
+        const round = sharedData.getRoundByCode(code);
+        
+        if (!round) {
+            return res.status(404).json({ error: 'Partida no encontrada' });
+        }
+        
+        res.json({
+            code: round.code,
+            status: round.status,
+            gameState: round.gameState,
+            playerCount: round.players.length,
+            maxPlayers: round.maxPlayers,
+            players: round.players.map(p => ({
+                name: p.name,
+                joinedAt: p.joinedAt,
+                boardIndex: p.boardIndex
+            })),
+            canStart: round.players.length >= 3
+        });
+    } catch (error) {
+        console.error('❌ Error getting players:', error);
+        res.status(500).json({ error: 'Error interno del servidor' });
+    }
+});
+
 router.post('/:code/call-card', (req, res) => {
     try {
         const { code } = req.params;
@@ -121,7 +349,6 @@ router.post('/:code/call-card', (req, res) => {
         }
         
         // MEJORADO: Permitir llamar cartas incluso si el estado no es 'active'
-        // Esto permite mayor flexibilidad
         if (round.status === 'finished') {
             return res.status(400).json({ error: 'La partida ya ha terminado' });
         }
@@ -131,7 +358,7 @@ router.post('/:code/call-card', (req, res) => {
             return res.status(400).json({ error: 'Número de carta inválido (debe ser 1-24)' });
         }
         
-        // MEJORADO: Prevenir cartas duplicadas pero con mejor logging
+        // MEJORADO: Prevenir cartas duplicadas
         if (round.calledNumbers.includes(calledCard)) {
             console.log(`⚠️  Carta ${calledCard} ya fue llamada en partida ${code}`);
             return res.status(400).json({ 
@@ -241,6 +468,89 @@ router.get('/:code/status', (req, res) => {
     }
 });
 
+router.post('/:code/bingo', (req, res) => {
+    try {
+        const { code } = req.params;
+        const { playerName, markedTiles, playerBoard } = req.body;
+        
+        const round = sharedData.getRoundByCode(code);
+        if (!round) {
+            return res.status(404).json({ error: 'Partida no encontrada' });
+        }
+        
+        if (round.status !== 'active') {
+            return res.status(400).json({ error: 'La partida no está activa' });
+        }
+        
+        if (round.winner) {
+            return res.status(400).json({ error: 'Ya hay un ganador en esta partida' });
+        }
+        
+        const isValidBingo = verifyBingo(markedTiles, playerBoard, round.calledNumbers);
+        
+        if (isValidBingo) {
+            // Actualizar partida con el ganador
+            sharedData.updateRound(code, {
+                winner: playerName,
+                winnerTime: new Date(),
+                status: 'finished',
+                gameState: 'ended'
+            });
+            
+            console.log(`🏆 ¡BINGO! Ganador: ${playerName} en partida ${code}`);
+            res.json({ 
+                success: true, 
+                winner: playerName,
+                message: '¡Felicidades! ¡Ganaste el BINGO!'
+            });
+        } else {
+            console.log(`❌ BINGO inválido de ${playerName} en partida ${code}`);
+            res.json({ 
+                success: false, 
+                message: 'BINGO inválido. Verifica tu tablero.'
+            });
+        }
+        
+    } catch (error) {
+        console.error('❌ Error verifying bingo:', error);
+        res.status(500).json({ error: 'Error interno del servidor' });
+    }
+});
+
+router.post('/:code/end', (req, res) => {
+    try {
+        const { code } = req.params;
+        const { hostEmail, reason } = req.body;
+        
+        const round = sharedData.getRoundByCode(code);
+        if (!round) {
+            return res.status(404).json({ error: 'Partida no encontrada' });
+        }
+        
+        if (round.hostEmail !== hostEmail) {
+            return res.status(403).json({ error: 'Solo el host puede terminar la partida' });
+        }
+        
+        // Actualizar partida como terminada
+        sharedData.updateRound(code, {
+            status: 'finished',
+            gameState: 'ended',
+            endReason: reason || 'host_ended',
+            endTime: new Date()
+        });
+        
+        console.log(`🛑 Partida ${code} terminada por el host. Razón: ${reason}`);
+        res.json({ 
+            success: true, 
+            message: 'Partida terminada correctamente'
+        });
+        
+    } catch (error) {
+        console.error('❌ Error ending round:', error);
+        res.status(500).json({ error: 'Error interno del servidor' });
+    }
+});
+
 // NUEVO: Endpoint para obtener historial detallado de cartas
 router.get('/:code/card-history', (req, res) => {
     try {
@@ -311,142 +621,7 @@ router.post('/:code/reset-cards', (req, res) => {
     }
 });
 
-// Mantener los otros endpoints existentes...
-router.get('/list', (req, res) => {
-    try {
-        const rounds = sharedData.getAllRounds();
-        const safeRounds = rounds.map(r => ({
-            code: r.code,
-            createdAt: r.createdAt,
-            status: r.status,
-            playerCount: r.players.length,
-            maxPlayers: r.maxPlayers,
-            gameState: r.gameState,
-            hostEmail: r.hostEmail,
-            totalCalled: r.calledNumbers.length,
-            currentNumber: r.currentNumber
-        }));
-        res.json(safeRounds);
-    } catch (error) {
-        console.error('❌ Error listing rounds:', error);
-        res.status(500).json({ error: 'Error interno del servidor' });
-    }
-});
-
-router.get('/:code', (req, res) => {
-    try {
-        const { code } = req.params;
-        const round = sharedData.getRoundByCode(code);
-        
-        if (!round) {
-            return res.status(404).json({ error: 'Partida no encontrada' });
-        }
-        
-        res.json({
-            code: round.code,
-            status: round.status,
-            gameState: round.gameState,
-            createdAt: round.createdAt,
-            playerCount: round.players.length,
-            maxPlayers: round.maxPlayers,
-            players: round.players.map(p => ({ 
-                name: p.name, 
-                joinedAt: p.joinedAt, 
-                boardIndex: p.boardIndex 
-            })),
-            hostEmail: round.hostEmail,
-            takenBoards: round.takenBoards,
-            totalCalled: round.calledNumbers.length,
-            currentNumber: round.currentNumber
-        });
-    } catch (error) {
-        console.error('❌ Error getting round:', error);
-        res.status(500).json({ error: 'Error interno del servidor' });
-    }
-});
-
-// ... [resto de endpoints existentes: join, start, boards, players, bingo, end] ...
-
-router.post('/:code/join', (req, res) => {
-    try {
-        const { code } = req.params;
-        const { playerName, playerEmail, selectedBoardIndex } = req.body;
-        
-        if (!playerName) {
-            return res.status(400).json({ error: 'Nombre del jugador es requerido' });
-        }
-        
-        const round = sharedData.getRoundByCode(code);
-        if (!round) {
-            return res.status(404).json({ error: 'Partida no encontrada' });
-        }
-        
-        if (round.status === 'finished') {
-            return res.status(400).json({ error: 'La partida ya ha terminado' });
-        }
-        
-        if (round.players.length >= round.maxPlayers) {
-            return res.status(400).json({ error: 'La partida está llena' });
-        }
-        
-        if (round.players.some(p => p.name === playerName)) {
-            return res.status(400).json({ error: 'El nombre del jugador ya está en uso' });
-        }
-        
-        let boardIndex = selectedBoardIndex;
-        
-        if (boardIndex === undefined || boardIndex === null || round.takenBoards.includes(boardIndex)) {
-            boardIndex = -1;
-            for (let i = 0; i < round.maxPlayers; i++) {
-                if (!round.takenBoards.includes(i)) {
-                    boardIndex = i;
-                    break;
-                }
-            }
-            
-            if (boardIndex === -1) {
-                return res.status(400).json({ error: 'No hay tableros disponibles' });
-            }
-        }
-        
-        if (boardIndex < 0 || boardIndex >= round.boards.length) {
-            return res.status(400).json({ error: 'Índice de tablero inválido' });
-        }
-        
-        if (round.takenBoards.includes(boardIndex)) {
-            return res.status(400).json({ error: 'El tablero seleccionado ya está ocupado' });
-        }
-        
-        const playerBoard = round.boards[boardIndex];
-        
-        const newPlayer = {
-            name: playerName,
-            email: playerEmail || null,
-            joinedAt: new Date(),
-            board: playerBoard,
-            markedNumbers: [],
-            boardIndex: boardIndex
-        };
-        
-        round.players.push(newPlayer);
-        round.takenBoards.push(boardIndex);
-        
-        console.log(`👤 Jugador ${playerName} se unió a ${code} con tablero ${boardIndex}`);
-        res.json({ 
-            success: true, 
-            message: 'Te has unido a la partida correctamente',
-            playerCount: round.players.length,
-            board: playerBoard,
-            boardIndex: boardIndex
-        });
-        
-    } catch (error) {
-        console.error('❌ Error joining round:', error);
-        res.status(500).json({ error: 'Error interno del servidor' });
-    }
-});
-
-// Función auxiliar para verificar bingo (sin cambios)
+// Función auxiliar para verificar bingo
 function verifyBingo(markedTiles, playerBoard, calledNumbers) {
     const boardFlat = [];
     for (let row = 0; row < 3; row++) {
