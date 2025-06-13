@@ -467,10 +467,15 @@ router.get('/:code/status', (req, res) => {
             playerCount: round.players.length,
             maxPlayers: round.maxPlayers,
             
-            // Estado del juego
+            // NUEVO: Estado del ganador
             winner: round.winner || null,
+            winnerTime: round.winnerTime || null,
+            winnerData: round.winner ? (round.winnerData || null) : null,
+            
+            // Estado del juego
             allCardsCalled: (round.calledNumbers ? round.calledNumbers.length : 0) >= (round.totalCardsAvailable || 24),
-            canCallMoreCards: (round.calledNumbers ? round.calledNumbers.length : 0) < (round.totalCardsAvailable || 24) && round.status !== 'finished'
+            canCallMoreCards: (round.calledNumbers ? round.calledNumbers.length : 0) < (round.totalCardsAvailable || 24) && round.status !== 'finished',
+            gameFinished: round.status === 'finished' || !!round.winner
         };
         
         // NUEVO: Agregar historial de cartas si se solicita
@@ -486,11 +491,19 @@ router.get('/:code/status', (req, res) => {
     }
 });
 
-// Endpoint para verificar bingo
+// MEJORADO: Endpoint para verificar bingo con nueva función
 router.post('/:code/bingo', (req, res) => {
     try {
         const { code } = req.params;
-        const { playerName, markedTiles, playerBoard } = req.body;
+        const { 
+            playerName, 
+            markedTiles, 
+            playerBoard, 
+            boardId = null,
+            calledCardsWhenClaimed = null 
+        } = req.body;
+        
+        console.log(`🎯 Verificación de BINGO de ${playerName} en partida ${code}`);
         
         const round = rounds.find(r => r.code === code);
         if (!round) {
@@ -498,40 +511,97 @@ router.post('/:code/bingo', (req, res) => {
         }
         
         if (round.status !== 'active') {
-            return res.status(400).json({ error: 'La partida no está activa' });
+            return res.status(400).json({ 
+                error: 'La partida no está activa',
+                currentStatus: round.status
+            });
         }
         
         if (round.winner) {
-            return res.status(400).json({ error: 'Ya hay un ganador en esta partida' });
+            return res.status(400).json({ 
+                error: 'Ya hay un ganador en esta partida',
+                winner: round.winner
+            });
         }
         
-        // Verificar si el bingo es válido
-        const isValidBingo = verifyBingo(markedTiles, playerBoard, round.calledNumbers);
+        // Verificar si el jugador existe en la partida
+        const player = round.players.find(p => p.name === playerName);
+        if (!player) {
+            return res.status(400).json({ 
+                error: 'Jugador no encontrado en esta partida'
+            });
+        }
         
-        if (isValidBingo) {
-            // Marcar como ganador
+        // NUEVA VERIFICACIÓN MEJORADA
+        const verification = verifyBingo(markedTiles, playerBoard, round.calledNumbers, {
+            playerName: playerName,
+            boardId: boardId,
+            calledCardsWhenClaimed: calledCardsWhenClaimed
+        });
+        
+        if (verification.valid) {
+            // ¡BINGO VÁLIDO! - Marcar como ganador
             round.winner = playerName;
             round.winnerTime = new Date();
+            round.winnerData = {
+                playerName: playerName,
+                boardId: boardId,
+                winningBoard: playerBoard,
+                markedTiles: markedTiles,
+                calledCardsAtWin: round.calledNumbers.slice(), // Copia del estado actual
+                totalCardsAtWin: round.calledNumbers.length,
+                verificationDetails: verification
+            };
             round.status = 'finished';
             round.gameState = 'ended';
             
-            console.log(`🏆 ¡BINGO! Ganador: ${playerName} en partida ${code}`);
+            console.log(`🏆 ¡BINGO VÁLIDO! Ganador: ${playerName} en partida ${code}`);
+            console.log(`🎯 Tablero ganador:`, playerBoard);
+            console.log(`📊 Total cartas llamadas: ${round.calledNumbers.length}`);
+            
+            // RESPUESTA DE ÉXITO
             res.json({ 
                 success: true, 
                 winner: playerName,
-                message: '¡Felicidades! ¡Ganaste el BINGO!'
+                message: verification.message,
+                winDetails: {
+                    winnerTime: round.winnerTime,
+                    totalCardsAtWin: round.calledNumbers.length,
+                    winningBoard: playerBoard,
+                    gameCode: code
+                }
             });
+            
+            // Log detallado para el servidor
+            console.log(`✅ PARTIDA ${code} FINALIZADA - Ganador: ${playerName}`);
+            
         } else {
-            console.log(`❌ BINGO inválido de ${playerName} en partida ${code}`);
+            // BINGO INVÁLIDO - Enviar detalles del error
+            console.log(`❌ BINGO INVÁLIDO de ${playerName} en partida ${code}`);
+            console.log(`📋 Razón: ${verification.reason}`);
+            console.log(`💬 Mensaje: ${verification.message}`);
+            
+            // RESPUESTA DE ERROR CON DETALLES
             res.json({ 
                 success: false, 
-                message: 'BINGO inválido. Verifica tu tablero.'
+                message: verification.message,
+                reason: verification.reason,
+                details: {
+                    missingCards: verification.missingCards || [],
+                    unmarkedTiles: verification.unmarkedTiles || [],
+                    invalidMarks: verification.invalidMarks || [],
+                    currentCalledCards: round.calledNumbers,
+                    totalCalled: round.calledNumbers.length
+                }
             });
         }
         
     } catch (error) {
         console.error('❌ Error verifying bingo:', error);
-        res.status(500).json({ error: 'Error interno del servidor' });
+        res.status(500).json({ 
+            error: 'Error interno del servidor',
+            details: process.env.NODE_ENV !== 'production' ? error.message : undefined
+        });
     }
 });
 
@@ -592,8 +662,48 @@ router.get('/:code/card-history', (req, res) => {
     }
 });
 
-// Función auxiliar para verificar bingo - CORREGIDA
-function verifyBingo(markedTiles, playerBoard, calledNumbers) {
+// NUEVO: Endpoint para obtener estado detallado del ganador
+router.get('/:code/winner', (req, res) => {
+    try {
+        const { code } = req.params;
+        const round = rounds.find(r => r.code === code);
+        
+        if (!round) {
+            return res.status(404).json({ error: 'Partida no encontrada' });
+        }
+        
+        if (!round.winner) {
+            return res.status(404).json({ 
+                error: 'No hay ganador aún',
+                gameState: round.gameState,
+                status: round.status
+            });
+        }
+        
+        res.json({
+            winner: round.winner,
+            winnerTime: round.winnerTime,
+            winnerData: round.winnerData || null,
+            gameCode: code,
+            totalPlayers: round.players.length,
+            gameDuration: round.winnerTime && round.gameStartTime ? 
+                round.winnerTime - round.gameStartTime : null
+        });
+        
+    } catch (error) {
+        console.error('❌ Error getting winner info:', error);
+        res.status(500).json({ error: 'Error interno del servidor' });
+    }
+});
+
+// Función auxiliar para verificar bingo - MEJORADA
+function verifyBingo(markedTiles, playerBoard, calledNumbers, playerData = {}) {
+    console.log("=== VERIFICANDO BINGO ===");
+    console.log("Jugador:", playerData.playerName || "Desconocido");
+    console.log("Tablero del jugador:", playerBoard);
+    console.log("Tiles marcados:", markedTiles);
+    console.log("Cartas llamadas:", calledNumbers);
+    
     // Convertir tablero 3x3 a array plano para comparar con markedTiles
     const boardFlat = [];
     for (let row = 0; row < 3; row++) {
@@ -602,36 +712,82 @@ function verifyBingo(markedTiles, playerBoard, calledNumbers) {
         }
     }
     
-    // Verificar que todos los números marcados hayan sido llamados
+    console.log("Tablero plano:", boardFlat);
+    
+    // PASO 1: Verificar que todas las cartas del tablero hayan sido llamadas
+    const missingCards = [];
+    for (let i = 0; i < boardFlat.length; i++) {
+        const number = boardFlat[i];
+        if (!calledNumbers.includes(number)) {
+            missingCards.push(number);
+        }
+    }
+    
+    if (missingCards.length > 0) {
+        console.log(`❌ BINGO INVÁLIDO: Faltan cartas por salir: ${missingCards.join(', ')}`);
+        return {
+            valid: false,
+            reason: 'missing_cards',
+            message: `Faltan cartas por salir: ${missingCards.join(', ')}`,
+            missingCards: missingCards
+        };
+    }
+    
+    // PASO 2: Verificar que el jugador haya marcado TODAS las casillas
+    const unmarkedTiles = [];
+    for (let i = 0; i < markedTiles.length; i++) {
+        if (!markedTiles[i]) {
+            unmarkedTiles.push({
+                index: i,
+                number: boardFlat[i]
+            });
+        }
+    }
+    
+    if (unmarkedTiles.length > 0) {
+        console.log(`❌ BINGO INVÁLIDO: Casillas sin marcar:`, unmarkedTiles);
+        return {
+            valid: false,
+            reason: 'unmarked_tiles',
+            message: `Debes marcar todas las casillas de tu tablero`,
+            unmarkedTiles: unmarkedTiles
+        };
+    }
+    
+    // PASO 3: Verificar que solo se hayan marcado números que realmente salieron
+    const invalidMarks = [];
     for (let i = 0; i < markedTiles.length; i++) {
         if (markedTiles[i]) {
             const number = boardFlat[i];
             if (!calledNumbers.includes(number)) {
-                console.log(`Número ${number} marcado pero no llamado`);
-                return false; // Número marcado pero no llamado
+                invalidMarks.push({
+                    index: i,
+                    number: number
+                });
             }
         }
     }
     
-    // Para ganar, el jugador debe tener TODAS las casillas marcadas
-    for (let i = 0; i < markedTiles.length; i++) {
-        if (!markedTiles[i]) {
-            console.log(`Tablero no completo - casilla ${i} sin marcar`);
-            return false; // El tablero no está completo
-        }
+    if (invalidMarks.length > 0) {
+        console.log(`❌ BINGO INVÁLIDO: Números marcados incorrectamente:`, invalidMarks);
+        return {
+            valid: false,
+            reason: 'invalid_marks',
+            message: `Tienes números marcados que no han salido`,
+            invalidMarks: invalidMarks
+        };
     }
     
-    // Verificar que todos los números del tablero hayan sido llamados
-    for (let i = 0; i < boardFlat.length; i++) {
-        const number = boardFlat[i];
-        if (!calledNumbers.includes(number)) {
-            console.log(`Número ${number} del tablero no ha sido llamado`);
-            return false; // Hay números en el tablero que no han salido
-        }
-    }
-    
-    console.log("✅ ¡BINGO VÁLIDO! Tablero completo y todos los números llamados");
-    return true; // BINGO válido - tablero completo y todos los números llamados
+    // PASO 4: ¡BINGO VÁLIDO!
+    console.log("✅ ¡BINGO VÁLIDO! Todas las verificaciones pasaron");
+    return {
+        valid: true,
+        reason: 'complete_board',
+        message: '¡Felicidades! ¡Ganaste el BINGO!',
+        completedAt: new Date(),
+        boardNumbers: boardFlat,
+        totalCardsInBoard: boardFlat.length
+    };
 }
 
 module.exports = router;
