@@ -31,7 +31,7 @@ const PREDEFINED_BOARDS = [
 
 router.post('/create', async (req, res) => {
     try {
-        const { code, hostEmail, hostPassword, maxPlayers = 10 } = req.body;
+        const { code, hostEmail, hostPassword, maxPlayers = 10, maxWinners = 3 } = req.body;
         
         console.log(`🎯 Creando partida: ${code} para ${hostEmail}`);
         
@@ -61,7 +61,7 @@ router.post('/create', async (req, res) => {
             return res.status(400).json({ error: 'Ya tienes una partida activa' });
         }
         
-        // Crear nueva partida/sesión
+        // Crear nueva partida/sesión con sistema de múltiples ganadores
         const newRound = {
             code: code,
             hostEmail: hostEmail,
@@ -78,7 +78,14 @@ router.post('/create', async (req, res) => {
             calledNumbers: [],
             currentNumber: null,
             
-            // NUEVOS CAMPOS para mejor tracking
+            // NUEVOS CAMPOS para múltiples ganadores
+            winners: [],                    // Array de ganadores
+            maxWinners: Math.min(maxWinners, 5), // Máximo de ganadores (hasta 5)
+            winnerCount: 0,                // Contador actual de ganadores
+            allowMultipleWinners: true,    // Permitir múltiples ganadores
+            gameFinishedTime: null,        // Tiempo cuando se completa el Top N
+            
+            // CAMPOS para mejor tracking
             lastCardTime: null,
             cardHistory: [],
             totalCardsAvailable: 24,
@@ -98,13 +105,14 @@ router.post('/create', async (req, res) => {
             }
         }
         
-        console.log(`✅ Partida creada con código: ${code} por ${hostEmail}`);
+        console.log(`✅ Partida creada con código: ${code} por ${hostEmail} (Max ganadores: ${newRound.maxWinners})`);
         res.json({ 
             success: true, 
             message: 'Partida creada correctamente',
             code: code,
             roundId: rounds.length - 1,
             maxPlayers: newRound.maxPlayers,
+            maxWinners: newRound.maxWinners,
             boards: newRound.boards.length
         });
         
@@ -124,7 +132,11 @@ router.get('/list', (req, res) => {
             maxPlayers: r.maxPlayers,
             gameState: r.gameState,
             hostEmail: r.hostEmail,
-            // NUEVOS CAMPOS para CardDisplayScene
+            // NUEVOS CAMPOS para múltiples ganadores
+            winners: r.winners || [],
+            winnerCount: r.winners ? r.winners.length : 0,
+            maxWinners: r.maxWinners || 3,
+            // CAMPOS para CardDisplayScene
             totalCalled: r.calledNumbers ? r.calledNumbers.length : 0,
             currentNumber: r.currentNumber || null
         }));
@@ -158,7 +170,11 @@ router.get('/:code', (req, res) => {
             })),
             hostEmail: round.hostEmail,
             takenBoards: round.takenBoards,
-            // NUEVOS CAMPOS para CardDisplayScene
+            // NUEVOS CAMPOS para múltiples ganadores
+            winners: round.winners || [],
+            winnerCount: round.winners ? round.winners.length : 0,
+            maxWinners: round.maxWinners || 3,
+            // CAMPOS para CardDisplayScene
             totalCalled: round.calledNumbers ? round.calledNumbers.length : 0,
             currentNumber: round.currentNumber || null
         });
@@ -273,13 +289,14 @@ router.post('/:code/start', (req, res) => {
         round.status = 'active';
         round.gameState = 'playing';
         round.startedAt = new Date();
-        round.gameStartTime = new Date(); // NUEVO campo
+        round.gameStartTime = new Date();
         
-        console.log(`🚀 Partida ${code} iniciada por ${hostEmail} con ${round.players.length} jugadores`);
+        console.log(`🚀 Partida ${code} iniciada por ${hostEmail} con ${round.players.length} jugadores (Max ganadores: ${round.maxWinners})`);
         res.json({ 
             success: true, 
             message: 'Partida iniciada correctamente',
-            playerCount: round.players.length
+            playerCount: round.players.length,
+            maxWinners: round.maxWinners
         });
         
     } catch (error) {
@@ -410,7 +427,7 @@ router.post('/:code/call-card', (req, res) => {
         
         // NUEVO: Verificar si se han llamado todas las cartas
         const allCardsCalled = round.calledNumbers.length >= (round.totalCardsAvailable || 24);
-        if (allCardsCalled) {
+        if (allCardsCalled && round.status !== 'finished') {
             round.gameState = 'completed';
             console.log(`🏁 Todas las cartas han sido llamadas en partida ${code}`);
         }
@@ -426,7 +443,11 @@ router.post('/:code/call-card', (req, res) => {
             maxCards: round.totalCardsAvailable || 24,
             gameState: round.gameState,
             lastCardTime: round.lastCardTime,
-            allCardsCalled: allCardsCalled
+            allCardsCalled: allCardsCalled,
+            // Información de ganadores
+            winners: round.winners || [],
+            winnerCount: round.winners ? round.winners.length : 0,
+            maxWinners: round.maxWinners || 3
         });
         
     } catch (error) {
@@ -435,7 +456,7 @@ router.post('/:code/call-card', (req, res) => {
     }
 });
 
-// MEJORADO: Endpoint para obtener estado del juego
+// MEJORADO: Endpoint para obtener estado del juego con múltiples ganadores
 router.get('/:code/status', (req, res) => {
     try {
         const { code } = req.params;
@@ -445,7 +466,7 @@ router.get('/:code/status', (req, res) => {
             return res.status(404).json({ error: 'Partida no encontrada' });
         }
         
-        // MEJORADO: Respuesta más detallada del estado
+        // MEJORADO: Respuesta más detallada del estado con múltiples ganadores
         const gameStatus = {
             code: round.code,
             status: round.status,
@@ -462,20 +483,28 @@ router.get('/:code/status', (req, res) => {
             // Información de tiempo
             createdAt: round.createdAt,
             gameStartTime: round.gameStartTime || null,
+            gameFinishedTime: round.gameFinishedTime || null,
             
             // Información de jugadores
             playerCount: round.players.length,
             maxPlayers: round.maxPlayers,
             
-            // NUEVO: Estado del ganador
-            winner: round.winner || null,
-            winnerTime: round.winnerTime || null,
-            winnerData: round.winner ? (round.winnerData || null) : null,
+            // NUEVO: Sistema de múltiples ganadores
+            winners: round.winners || [],
+            winnerCount: round.winners ? round.winners.length : 0,
+            maxWinners: round.maxWinners || 3,
+            allowMultipleWinners: round.allowMultipleWinners !== false,
+            
+            // Compatibilidad con sistema anterior (primer ganador)
+            winner: round.winners && round.winners.length > 0 ? round.winners[0].playerName : null,
+            winnerTime: round.winners && round.winners.length > 0 ? round.winners[0].winnerTime : null,
+            winnerData: round.winners && round.winners.length > 0 ? round.winners[0] : null,
             
             // Estado del juego
             allCardsCalled: (round.calledNumbers ? round.calledNumbers.length : 0) >= (round.totalCardsAvailable || 24),
             canCallMoreCards: (round.calledNumbers ? round.calledNumbers.length : 0) < (round.totalCardsAvailable || 24) && round.status !== 'finished',
-            gameFinished: round.status === 'finished' || !!round.winner
+            gameFinished: round.status === 'finished',
+            waitingForMoreWinners: round.status === 'active' && round.winners && round.winners.length > 0 && round.winners.length < (round.maxWinners || 3)
         };
         
         // NUEVO: Agregar historial de cartas si se solicita
@@ -491,7 +520,7 @@ router.get('/:code/status', (req, res) => {
     }
 });
 
-// MEJORADO: Endpoint para verificar bingo con nueva función
+// NUEVO: Endpoint para verificar bingo con múltiples ganadores
 router.post('/:code/bingo', (req, res) => {
     try {
         const { code } = req.params;
@@ -517,10 +546,26 @@ router.post('/:code/bingo', (req, res) => {
             });
         }
         
-        if (round.winner) {
+        // MODIFICADO: Verificar si ya hay suficientes ganadores
+        const maxWinners = round.maxWinners || 3;
+        if (round.winners && round.winners.length >= maxWinners) {
             return res.status(400).json({ 
-                error: 'Ya hay un ganador en esta partida',
-                winner: round.winner
+                error: `Ya se completó el Top ${maxWinners} de ganadores`,
+                winners: round.winners.map(w => ({
+                    name: w.playerName,
+                    position: w.position,
+                    time: w.winnerTime
+                }))
+            });
+        }
+        
+        // MODIFICADO: Verificar si este jugador ya ganó
+        if (round.winners && round.winners.some(w => w.playerName === playerName)) {
+            const existingWinner = round.winners.find(w => w.playerName === playerName);
+            return res.status(400).json({ 
+                error: 'Ya ganaste en esta partida',
+                position: existingWinner.position,
+                positionText: getPositionText(existingWinner.position)
             });
         }
         
@@ -532,7 +577,7 @@ router.post('/:code/bingo', (req, res) => {
             });
         }
         
-        // NUEVA VERIFICACIÓN MEJORADA
+        // VERIFICACIÓN DE BINGO
         const verification = verifyBingo(markedTiles, playerBoard, round.calledNumbers, {
             playerName: playerName,
             boardId: boardId,
@@ -540,48 +585,71 @@ router.post('/:code/bingo', (req, res) => {
         });
         
         if (verification.valid) {
-            // ¡BINGO VÁLIDO! - Marcar como ganador
-            round.winner = playerName;
-            round.winnerTime = new Date();
-            round.winnerData = {
+            // ¡BINGO VÁLIDO! - Agregar como ganador
+            
+            // Inicializar array de ganadores si no existe
+            if (!round.winners) {
+                round.winners = [];
+            }
+            
+            // Determinar posición del ganador
+            const position = round.winners.length + 1;
+            const winnerTime = new Date();
+            
+            // Crear datos del ganador
+            const winnerData = {
                 playerName: playerName,
+                position: position,
+                winnerTime: winnerTime,
                 boardId: boardId,
                 winningBoard: playerBoard,
                 markedTiles: markedTiles,
-                calledCardsAtWin: round.calledNumbers.slice(), // Copia del estado actual
+                calledCardsAtWin: round.calledNumbers.slice(),
                 totalCardsAtWin: round.calledNumbers.length,
                 verificationDetails: verification
             };
-            round.status = 'finished';
-            round.gameState = 'ended';
             
-            console.log(`🏆 ¡BINGO VÁLIDO! Ganador: ${playerName} en partida ${code}`);
-            console.log(`🎯 Tablero ganador:`, playerBoard);
-            console.log(`📊 Total cartas llamadas: ${round.calledNumbers.length}`);
+            // Agregar ganador a la lista
+            round.winners.push(winnerData);
+            round.winnerCount = round.winners.length;
             
-            // RESPUESTA DE ÉXITO
+            // IMPORTANTE: Solo terminar el juego cuando se alcance el máximo de ganadores
+            if (round.winners.length >= maxWinners) {
+                round.status = 'finished';
+                round.gameState = 'ended';
+                round.gameFinishedTime = winnerTime;
+                console.log(`🏁 PARTIDA ${code} FINALIZADA - Top ${maxWinners} completo`);
+            } else {
+                // Mantener el juego activo para más ganadores
+                console.log(`🏆 Ganador ${position}° lugar: ${playerName} - Esperando más ganadores (${round.winners.length}/${maxWinners})`);
+            }
+            
+            console.log(`✅ BINGO VÁLIDO - ${playerName} es el ${position}° ganador en partida ${code}`);
+            
+            // RESPUESTA DE ÉXITO con información de múltiples ganadores
             res.json({ 
                 success: true, 
-                winner: playerName,
-                message: verification.message,
-                winDetails: {
-                    winnerTime: round.winnerTime,
-                    totalCardsAtWin: round.calledNumbers.length,
-                    winningBoard: playerBoard,
-                    gameCode: code
-                }
+                playerName: playerName,
+                position: position,
+                positionText: getPositionText(position),
+                message: `¡Felicidades! Eres el ${getPositionText(position)} lugar`,
+                winners: round.winners.map(w => ({
+                    name: w.playerName,
+                    position: w.position,
+                    positionText: getPositionText(w.position),
+                    time: w.winnerTime
+                })),
+                gameFinished: round.status === 'finished',
+                waitingForMore: round.status !== 'finished',
+                remainingWinners: Math.max(0, maxWinners - round.winners.length),
+                maxWinners: maxWinners,
+                totalWinners: round.winners.length
             });
             
-            // Log detallado para el servidor
-            console.log(`✅ PARTIDA ${code} FINALIZADA - Ganador: ${playerName}`);
-            
         } else {
-            // BINGO INVÁLIDO - Enviar detalles del error
-            console.log(`❌ BINGO INVÁLIDO de ${playerName} en partida ${code}`);
-            console.log(`📋 Razón: ${verification.reason}`);
-            console.log(`💬 Mensaje: ${verification.message}`);
+            // BINGO INVÁLIDO
+            console.log(`❌ BINGO INVÁLIDO de ${playerName} en partida ${code}: ${verification.reason}`);
             
-            // RESPUESTA DE ERROR CON DETALLES
             res.json({ 
                 success: false, 
                 message: verification.message,
@@ -625,10 +693,19 @@ router.post('/:code/end', (req, res) => {
         round.endReason = reason || 'host_ended';
         round.endTime = new Date();
         
+        // Si no hay gameFinishedTime, establecerlo ahora
+        if (!round.gameFinishedTime) {
+            round.gameFinishedTime = round.endTime;
+        }
+        
         console.log(`🛑 Partida ${code} terminada por el host. Razón: ${reason}`);
+        console.log(`📊 Ganadores finales: ${round.winners ? round.winners.length : 0}/${round.maxWinners || 3}`);
+        
         res.json({ 
             success: true, 
-            message: 'Partida terminada correctamente'
+            message: 'Partida terminada correctamente',
+            winners: round.winners || [],
+            totalWinners: round.winners ? round.winners.length : 0
         });
         
     } catch (error) {
@@ -653,7 +730,9 @@ router.get('/:code/card-history', (req, res) => {
             calledNumbers: round.calledNumbers || [],
             cardHistory: round.cardHistory || [],
             gameStartTime: round.gameStartTime || null,
-            lastCardTime: round.lastCardTime || null
+            lastCardTime: round.lastCardTime || null,
+            winners: round.winners || [],
+            winnerCount: round.winners ? round.winners.length : 0
         });
         
     } catch (error) {
@@ -662,7 +741,53 @@ router.get('/:code/card-history', (req, res) => {
     }
 });
 
-// NUEVO: Endpoint para obtener estado detallado del ganador
+// NUEVO: Endpoint específico para obtener ganadores
+router.get('/:code/winners', (req, res) => {
+    try {
+        const { code } = req.params;
+        const round = rounds.find(r => r.code === code);
+        
+        if (!round) {
+            return res.status(404).json({ error: 'Partida no encontrada' });
+        }
+        
+        const maxWinners = round.maxWinners || 3;
+        const winners = round.winners || [];
+        
+        res.json({
+            code: round.code,
+            winners: winners.map(w => ({
+                ...w,
+                positionText: getPositionText(w.position)
+            })),
+            winnerCount: winners.length,
+            maxWinners: maxWinners,
+            gameFinished: round.status === 'finished',
+            waitingForMore: round.status === 'active' && winners.length > 0 && winners.length < maxWinners,
+            remainingSlots: Math.max(0, maxWinners - winners.length),
+            positions: {
+                first: winners.find(w => w.position === 1) || null,
+                second: winners.find(w => w.position === 2) || null,
+                third: winners.find(w => w.position === 3) || null,
+                fourth: winners.find(w => w.position === 4) || null,
+                fifth: winners.find(w => w.position === 5) || null
+            },
+            leaderboard: winners.sort((a, b) => a.position - b.position).map(w => ({
+                position: w.position,
+                positionText: getPositionText(w.position),
+                playerName: w.playerName,
+                winnerTime: w.winnerTime,
+                totalCardsAtWin: w.totalCardsAtWin
+            }))
+        });
+        
+    } catch (error) {
+        console.error('❌ Error getting winners:', error);
+        res.status(500).json({ error: 'Error interno del servidor' });
+    }
+});
+
+// NUEVO: Endpoint para obtener estado detallado del ganador (compatibilidad)
 router.get('/:code/winner', (req, res) => {
     try {
         const { code } = req.params;
@@ -672,22 +797,33 @@ router.get('/:code/winner', (req, res) => {
             return res.status(404).json({ error: 'Partida no encontrada' });
         }
         
-        if (!round.winner) {
+        if (!round.winners || round.winners.length === 0) {
             return res.status(404).json({ 
-                error: 'No hay ganador aún',
+                error: 'No hay ganadores aún',
                 gameState: round.gameState,
-                status: round.status
+                status: round.status,
+                maxWinners: round.maxWinners || 3
             });
         }
         
+        // Devolver información del primer ganador para compatibilidad
+        const firstWinner = round.winners[0];
+        
         res.json({
-            winner: round.winner,
-            winnerTime: round.winnerTime,
-            winnerData: round.winnerData || null,
+            winner: firstWinner.playerName,
+            winnerTime: firstWinner.winnerTime,
+            winnerData: firstWinner,
             gameCode: code,
             totalPlayers: round.players.length,
-            gameDuration: round.winnerTime && round.gameStartTime ? 
-                round.winnerTime - round.gameStartTime : null
+            gameDuration: firstWinner.winnerTime && round.gameStartTime ? 
+                firstWinner.winnerTime - round.gameStartTime : null,
+            // Información adicional de múltiples ganadores
+            allWinners: round.winners,
+            winnerCount: round.winners.length,
+            maxWinners: round.maxWinners || 3,
+            isFirstWinner: true,
+            position: firstWinner.position,
+            positionText: getPositionText(firstWinner.position)
         });
         
     } catch (error) {
@@ -696,7 +832,119 @@ router.get('/:code/winner', (req, res) => {
     }
 });
 
-// Función auxiliar para verificar bingo - MEJORADA
+// NUEVO: Endpoint para obtener estadísticas de la partida
+router.get('/:code/stats', (req, res) => {
+    try {
+        const { code } = req.params;
+        const round = rounds.find(r => r.code === code);
+        
+        if (!round) {
+            return res.status(404).json({ error: 'Partida no encontrada' });
+        }
+        
+        const winners = round.winners || [];
+        const totalCards = round.calledNumbers ? round.calledNumbers.length : 0;
+        const gameDuration = round.gameStartTime && round.gameFinishedTime ? 
+            round.gameFinishedTime - round.gameStartTime : null;
+        
+        res.json({
+            code: round.code,
+            gameStats: {
+                totalPlayers: round.players.length,
+                maxPlayers: round.maxPlayers,
+                totalWinners: winners.length,
+                maxWinners: round.maxWinners || 3,
+                totalCardsCalled: totalCards,
+                maxCards: round.totalCardsAvailable || 24,
+                cardsRemaining: (round.totalCardsAvailable || 24) - totalCards,
+                gameStatus: round.status,
+                gameState: round.gameState
+            },
+            timeStats: {
+                createdAt: round.createdAt,
+                gameStartTime: round.gameStartTime,
+                gameFinishedTime: round.gameFinishedTime,
+                gameDuration: gameDuration,
+                lastCardTime: round.lastCardTime,
+                averageCardInterval: round.cardHistory && round.cardHistory.length > 1 ? 
+                    calculateAverageCardInterval(round.cardHistory) : null
+            },
+            winnerStats: winners.map(w => ({
+                position: w.position,
+                positionText: getPositionText(w.position),
+                playerName: w.playerName,
+                winnerTime: w.winnerTime,
+                cardsAtWin: w.totalCardsAtWin,
+                timeToWin: w.winnerTime && round.gameStartTime ? 
+                    w.winnerTime - round.gameStartTime : null
+            })),
+            boardStats: {
+                totalBoards: round.boards.length,
+                assignedBoards: round.takenBoards.length,
+                availableBoards: round.boards.length - round.takenBoards.length
+            }
+        });
+        
+    } catch (error) {
+        console.error('❌ Error getting game stats:', error);
+        res.status(500).json({ error: 'Error interno del servidor' });
+    }
+});
+
+// NUEVO: Endpoint para reiniciar partida (solo para testing/desarrollo)
+router.post('/:code/reset', (req, res) => {
+    try {
+        const { code } = req.params;
+        const { hostEmail, confirm } = req.body;
+        
+        if (!confirm) {
+            return res.status(400).json({ error: 'Debes confirmar el reinicio de la partida' });
+        }
+        
+        const round = rounds.find(r => r.code === code);
+        if (!round) {
+            return res.status(404).json({ error: 'Partida no encontrada' });
+        }
+        
+        if (round.hostEmail !== hostEmail) {
+            return res.status(403).json({ error: 'Solo el host puede reiniciar la partida' });
+        }
+        
+        // Reiniciar estado del juego manteniendo jugadores
+        round.status = 'waiting';
+        round.gameState = 'lobby';
+        round.winners = [];
+        round.winnerCount = 0;
+        round.calledNumbers = [];
+        round.currentNumber = null;
+        round.cardHistory = [];
+        round.lastCardTime = null;
+        round.gameStartTime = null;
+        round.gameFinishedTime = null;
+        round.endTime = null;
+        round.endReason = null;
+        
+        // Limpiar marcas de jugadores
+        round.players.forEach(player => {
+            player.markedNumbers = [];
+        });
+        
+        console.log(`🔄 Partida ${code} reiniciada por ${hostEmail}`);
+        
+        res.json({ 
+            success: true, 
+            message: 'Partida reiniciada correctamente',
+            playerCount: round.players.length,
+            maxWinners: round.maxWinners
+        });
+        
+    } catch (error) {
+        console.error('❌ Error resetting round:', error);
+        res.status(500).json({ error: 'Error interno del servidor' });
+    }
+});
+
+// Función auxiliar para verificar bingo - MEJORADA para múltiples ganadores
 function verifyBingo(markedTiles, playerBoard, calledNumbers, playerData = {}) {
     console.log("=== VERIFICANDO BINGO ===");
     console.log("Jugador:", playerData.playerName || "Desconocido");
@@ -788,6 +1036,33 @@ function verifyBingo(markedTiles, playerBoard, calledNumbers, playerData = {}) {
         boardNumbers: boardFlat,
         totalCardsInBoard: boardFlat.length
     };
+}
+
+// NUEVA FUNCIÓN: Obtener texto de posición
+function getPositionText(position) {
+    switch(position) {
+        case 1: return "primer";
+        case 2: return "segundo"; 
+        case 3: return "tercer";
+        case 4: return "cuarto";
+        case 5: return "quinto";
+        default: return position + "°";
+    }
+}
+
+// NUEVA FUNCIÓN: Calcular intervalo promedio entre cartas
+function calculateAverageCardInterval(cardHistory) {
+    if (!cardHistory || cardHistory.length < 2) {
+        return null;
+    }
+    
+    let totalInterval = 0;
+    for (let i = 1; i < cardHistory.length; i++) {
+        const interval = new Date(cardHistory[i].timestamp) - new Date(cardHistory[i-1].timestamp);
+        totalInterval += interval;
+    }
+    
+    return Math.round(totalInterval / (cardHistory.length - 1)); // Promedio en milisegundos
 }
 
 module.exports = router;
