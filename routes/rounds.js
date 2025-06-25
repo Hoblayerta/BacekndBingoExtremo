@@ -175,7 +175,7 @@ router.get('/:code', (req, res) => {
             takenBoards: round.takenBoards,
             // MODIFICADO: Información de ganadores sin límite automático
             winners: round.winners || [],
-            winnerCount: round.winners ? r.winners.length : 0,
+            winnerCount: round.winners ? round.winners.length : 0,
             maxWinners: round.maxWinners || 999,
             autoEndOnWinners: round.autoEndOnWinners || false,
             // CAMPOS para CardDisplayScene
