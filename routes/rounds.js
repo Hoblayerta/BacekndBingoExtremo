@@ -31,7 +31,7 @@ const PREDEFINED_BOARDS = [
 
 router.post('/create', async (req, res) => {
     try {
-        const { code, hostEmail, hostPassword, maxPlayers = 10, maxWinners = 3 } = req.body;
+        const { code, hostEmail, hostPassword, maxPlayers = 10, maxWinners = 999 } = req.body; // CAMBIADO: maxWinners alto por defecto
         
         console.log(`🎯 Creando partida: ${code} para ${hostEmail}`);
         
@@ -61,7 +61,7 @@ router.post('/create', async (req, res) => {
             return res.status(400).json({ error: 'Ya tienes una partida activa' });
         }
         
-        // Crear nueva partida/sesión con sistema de múltiples ganadores
+        // MODIFICADO: Crear nueva partida sin límite automático de ganadores
         const newRound = {
             code: code,
             hostEmail: hostEmail,
@@ -78,12 +78,13 @@ router.post('/create', async (req, res) => {
             calledNumbers: [],
             currentNumber: null,
             
-            // NUEVOS CAMPOS para múltiples ganadores
-            winners: [],                    // Array de ganadores
-            maxWinners: Math.min(maxWinners, 5), // Máximo de ganadores (hasta 5)
+            // MODIFICADO: Sin límite automático de ganadores
+            winners: [],                    // Array de ganadores (sin límite)
+            maxWinners: 999,               // Sin límite práctico
             winnerCount: 0,                // Contador actual de ganadores
             allowMultipleWinners: true,    // Permitir múltiples ganadores
-            gameFinishedTime: null,        // Tiempo cuando se completa el Top N
+            gameFinishedTime: null,        // Solo se establece cuando el host termina
+            autoEndOnWinners: false,       // NUEVO: Desactivar terminación automática
             
             // CAMPOS para mejor tracking
             lastCardTime: null,
@@ -105,7 +106,7 @@ router.post('/create', async (req, res) => {
             }
         }
         
-        console.log(`✅ Partida creada con código: ${code} por ${hostEmail} (Max ganadores: ${newRound.maxWinners})`);
+        console.log(`✅ Partida creada con código: ${code} por ${hostEmail} (Control manual por host)`);
         res.json({ 
             success: true, 
             message: 'Partida creada correctamente',
@@ -113,6 +114,7 @@ router.post('/create', async (req, res) => {
             roundId: rounds.length - 1,
             maxPlayers: newRound.maxPlayers,
             maxWinners: newRound.maxWinners,
+            autoEndOnWinners: newRound.autoEndOnWinners,
             boards: newRound.boards.length
         });
         
@@ -132,10 +134,11 @@ router.get('/list', (req, res) => {
             maxPlayers: r.maxPlayers,
             gameState: r.gameState,
             hostEmail: r.hostEmail,
-            // NUEVOS CAMPOS para múltiples ganadores
+            // MODIFICADO: Información de ganadores sin límite
             winners: r.winners || [],
             winnerCount: r.winners ? r.winners.length : 0,
-            maxWinners: r.maxWinners || 3,
+            maxWinners: r.maxWinners || 999,
+            autoEndOnWinners: r.autoEndOnWinners || false,
             // CAMPOS para CardDisplayScene
             totalCalled: r.calledNumbers ? r.calledNumbers.length : 0,
             currentNumber: r.currentNumber || null
@@ -170,10 +173,11 @@ router.get('/:code', (req, res) => {
             })),
             hostEmail: round.hostEmail,
             takenBoards: round.takenBoards,
-            // NUEVOS CAMPOS para múltiples ganadores
+            // MODIFICADO: Información de ganadores sin límite automático
             winners: round.winners || [],
-            winnerCount: round.winners ? round.winners.length : 0,
-            maxWinners: round.maxWinners || 3,
+            winnerCount: round.winners ? r.winners.length : 0,
+            maxWinners: round.maxWinners || 999,
+            autoEndOnWinners: round.autoEndOnWinners || false,
             // CAMPOS para CardDisplayScene
             totalCalled: round.calledNumbers ? round.calledNumbers.length : 0,
             currentNumber: round.currentNumber || null
@@ -291,12 +295,12 @@ router.post('/:code/start', (req, res) => {
         round.startedAt = new Date();
         round.gameStartTime = new Date();
         
-        console.log(`🚀 Partida ${code} iniciada por ${hostEmail} con ${round.players.length} jugadores (Max ganadores: ${round.maxWinners})`);
+        console.log(`🚀 Partida ${code} iniciada por ${hostEmail} con ${round.players.length} jugadores (Control manual)`);
         res.json({ 
             success: true, 
             message: 'Partida iniciada correctamente',
             playerCount: round.players.length,
-            maxWinners: round.maxWinners
+            autoEndOnWinners: round.autoEndOnWinners || false
         });
         
     } catch (error) {
@@ -425,11 +429,11 @@ router.post('/:code/call-card', (req, res) => {
             console.log(`🚀 Partida ${code} iniciada automáticamente al llamar primera carta`);
         }
         
-        // NUEVO: Verificar si se han llamado todas las cartas
+        // MODIFICADO: Solo marcar como completado, NO terminar automáticamente
         const allCardsCalled = round.calledNumbers.length >= (round.totalCardsAvailable || 24);
-        if (allCardsCalled && round.status !== 'finished') {
+        if (allCardsCalled && round.gameState !== 'completed') {
             round.gameState = 'completed';
-            console.log(`🏁 Todas las cartas han sido llamadas en partida ${code}`);
+            console.log(`📋 Todas las cartas han sido llamadas en partida ${code} - Esperando que el host termine la partida`);
         }
         
         console.log(`✅ Carta ${calledCard} llamada en partida ${code} (${round.calledNumbers.length}/${round.totalCardsAvailable || 24})`);
@@ -447,7 +451,8 @@ router.post('/:code/call-card', (req, res) => {
             // Información de ganadores
             winners: round.winners || [],
             winnerCount: round.winners ? round.winners.length : 0,
-            maxWinners: round.maxWinners || 3
+            maxWinners: round.maxWinners || 999,
+            autoEndOnWinners: round.autoEndOnWinners || false
         });
         
     } catch (error) {
@@ -456,7 +461,7 @@ router.post('/:code/call-card', (req, res) => {
     }
 });
 
-// MEJORADO: Endpoint para obtener estado del juego con múltiples ganadores
+// MEJORADO: Endpoint para obtener estado del juego sin terminación automática
 router.get('/:code/status', (req, res) => {
     try {
         const { code } = req.params;
@@ -466,7 +471,7 @@ router.get('/:code/status', (req, res) => {
             return res.status(404).json({ error: 'Partida no encontrada' });
         }
         
-        // MEJORADO: Respuesta más detallada del estado con múltiples ganadores
+        // MEJORADO: Respuesta detallada sin límite automático de ganadores
         const gameStatus = {
             code: round.code,
             status: round.status,
@@ -489,11 +494,12 @@ router.get('/:code/status', (req, res) => {
             playerCount: round.players.length,
             maxPlayers: round.maxPlayers,
             
-            // NUEVO: Sistema de múltiples ganadores
+            // MODIFICADO: Sistema de ganadores sin límite automático
             winners: round.winners || [],
             winnerCount: round.winners ? round.winners.length : 0,
-            maxWinners: round.maxWinners || 3,
+            maxWinners: round.maxWinners || 999,
             allowMultipleWinners: round.allowMultipleWinners !== false,
+            autoEndOnWinners: round.autoEndOnWinners || false,
             
             // Compatibilidad con sistema anterior (primer ganador)
             winner: round.winners && round.winners.length > 0 ? round.winners[0].playerName : null,
@@ -504,7 +510,7 @@ router.get('/:code/status', (req, res) => {
             allCardsCalled: (round.calledNumbers ? round.calledNumbers.length : 0) >= (round.totalCardsAvailable || 24),
             canCallMoreCards: (round.calledNumbers ? round.calledNumbers.length : 0) < (round.totalCardsAvailable || 24) && round.status !== 'finished',
             gameFinished: round.status === 'finished',
-            waitingForMoreWinners: round.status === 'active' && round.winners && round.winners.length > 0 && round.winners.length < (round.maxWinners || 3)
+            waitingForHostToEnd: round.status === 'active' && round.winners && round.winners.length > 0 // NUEVO
         };
         
         // NUEVO: Agregar historial de cartas si se solicita
@@ -520,7 +526,7 @@ router.get('/:code/status', (req, res) => {
     }
 });
 
-// NUEVO: Endpoint para verificar bingo con múltiples ganadores
+// MODIFICADO: Endpoint para verificar bingo SIN terminación automática
 router.post('/:code/bingo', (req, res) => {
     try {
         const { code } = req.params;
@@ -546,18 +552,7 @@ router.post('/:code/bingo', (req, res) => {
             });
         }
         
-        // MODIFICADO: Verificar si ya hay suficientes ganadores
-        const maxWinners = round.maxWinners || 3;
-        if (round.winners && round.winners.length >= maxWinners) {
-            return res.status(400).json({ 
-                error: `Ya se completó el Top ${maxWinners} de ganadores`,
-                winners: round.winners.map(w => ({
-                    name: w.playerName,
-                    position: w.position,
-                    time: w.winnerTime
-                }))
-            });
-        }
+        // ELIMINADO: Verificación de límite máximo de ganadores
         
         // MODIFICADO: Verificar si este jugador ya ganó
         if (round.winners && round.winners.some(w => w.playerName === playerName)) {
@@ -585,7 +580,7 @@ router.post('/:code/bingo', (req, res) => {
         });
         
         if (verification.valid) {
-            // ¡BINGO VÁLIDO! - Agregar como ganador
+            // ¡BINGO VÁLIDO! - Agregar como ganador SIN terminar automáticamente
             
             // Inicializar array de ganadores si no existe
             if (!round.winners) {
@@ -613,20 +608,13 @@ router.post('/:code/bingo', (req, res) => {
             round.winners.push(winnerData);
             round.winnerCount = round.winners.length;
             
-            // IMPORTANTE: Solo terminar el juego cuando se alcance el máximo de ganadores
-            if (round.winners.length >= maxWinners) {
-                round.status = 'finished';
-                round.gameState = 'ended';
-                round.gameFinishedTime = winnerTime;
-                console.log(`🏁 PARTIDA ${code} FINALIZADA - Top ${maxWinners} completo`);
-            } else {
-                // Mantener el juego activo para más ganadores
-                console.log(`🏆 Ganador ${position}° lugar: ${playerName} - Esperando más ganadores (${round.winners.length}/${maxWinners})`);
-            }
+            // MODIFICADO: NO terminar automáticamente el juego
+            // El juego solo termina cuando el host presiona el botón BtnEndRound
+            console.log(`🏆 Ganador ${position}° lugar: ${playerName} - Partida continúa hasta que el host la termine`);
             
-            console.log(`✅ BINGO VÁLIDO - ${playerName} es el ${position}° ganador en partida ${code}`);
+            console.log(`✅ BINGO VÁLIDO - ${playerName} es el ${position}° ganador en partida ${code} (Esperando terminación manual)`);
             
-            // RESPUESTA DE ÉXITO con información de múltiples ganadores
+            // RESPUESTA DE ÉXITO - sin terminación automática
             res.json({ 
                 success: true, 
                 playerName: playerName,
@@ -639,11 +627,10 @@ router.post('/:code/bingo', (req, res) => {
                     positionText: getPositionText(w.position),
                     time: w.winnerTime
                 })),
-                gameFinished: round.status === 'finished',
-                waitingForMore: round.status !== 'finished',
-                remainingWinners: Math.max(0, maxWinners - round.winners.length),
-                maxWinners: maxWinners,
-                totalWinners: round.winners.length
+                gameFinished: false, // SIEMPRE falso hasta que el host termine
+                waitingForHostToEnd: true, // NUEVO: Indicar que se espera al host
+                totalWinners: round.winners.length,
+                gameStillActive: true // NUEVO: Confirmar que el juego sigue activo
             });
             
         } else {
@@ -673,11 +660,13 @@ router.post('/:code/bingo', (req, res) => {
     }
 });
 
-// Endpoint para terminar partida
+// MODIFICADO: Endpoint para terminar partida (SOLO el host puede terminar)
 router.post('/:code/end', (req, res) => {
     try {
         const { code } = req.params;
         const { hostEmail, reason } = req.body;
+        
+        console.log(`🛑 Host ${hostEmail} solicitando terminar partida ${code}`);
         
         const round = rounds.find(r => r.code === code);
         if (!round) {
@@ -688,24 +677,33 @@ router.post('/:code/end', (req, res) => {
             return res.status(403).json({ error: 'Solo el host puede terminar la partida' });
         }
         
+        if (round.status === 'finished') {
+            return res.status(400).json({ error: 'La partida ya está terminada' });
+        }
+        
+        // TERMINAR PARTIDA
         round.status = 'finished';
         round.gameState = 'ended';
         round.endReason = reason || 'host_ended';
         round.endTime = new Date();
+        round.gameFinishedTime = round.endTime; // Establecer tiempo de finalización
         
-        // Si no hay gameFinishedTime, establecerlo ahora
-        if (!round.gameFinishedTime) {
-            round.gameFinishedTime = round.endTime;
-        }
+        console.log(`✅ Partida ${code} terminada por el host ${hostEmail}`);
+        console.log(`📊 Ganadores finales: ${round.winners ? round.winners.length : 0} jugadores`);
         
-        console.log(`🛑 Partida ${code} terminada por el host. Razón: ${reason}`);
-        console.log(`📊 Ganadores finales: ${round.winners ? round.winners.length : 0}/${round.maxWinners || 3}`);
-        
+        // Respuesta con información completa de finalización
         res.json({ 
             success: true, 
-            message: 'Partida terminada correctamente',
+            message: 'Partida terminada correctamente por el host',
+            endReason: round.endReason,
+            endTime: round.endTime,
             winners: round.winners || [],
-            totalWinners: round.winners ? round.winners.length : 0
+            totalWinners: round.winners ? round.winners.length : 0,
+            gameStats: {
+                totalPlayers: round.players.length,
+                totalCardsCalled: round.calledNumbers ? round.calledNumbers.length : 0,
+                gameDuration: round.gameStartTime ? round.endTime - round.gameStartTime : null
+            }
         });
         
     } catch (error) {
@@ -741,7 +739,7 @@ router.get('/:code/card-history', (req, res) => {
     }
 });
 
-// NUEVO: Endpoint específico para obtener ganadores
+// MODIFICADO: Endpoint específico para obtener ganadores (sin límite)
 router.get('/:code/winners', (req, res) => {
     try {
         const { code } = req.params;
@@ -751,7 +749,6 @@ router.get('/:code/winners', (req, res) => {
             return res.status(404).json({ error: 'Partida no encontrada' });
         }
         
-        const maxWinners = round.maxWinners || 3;
         const winners = round.winners || [];
         
         res.json({
@@ -761,17 +758,10 @@ router.get('/:code/winners', (req, res) => {
                 positionText: getPositionText(w.position)
             })),
             winnerCount: winners.length,
-            maxWinners: maxWinners,
+            maxWinners: round.maxWinners || 999,
             gameFinished: round.status === 'finished',
-            waitingForMore: round.status === 'active' && winners.length > 0 && winners.length < maxWinners,
-            remainingSlots: Math.max(0, maxWinners - winners.length),
-            positions: {
-                first: winners.find(w => w.position === 1) || null,
-                second: winners.find(w => w.position === 2) || null,
-                third: winners.find(w => w.position === 3) || null,
-                fourth: winners.find(w => w.position === 4) || null,
-                fifth: winners.find(w => w.position === 5) || null
-            },
+            waitingForHostToEnd: round.status === 'active' && winners.length > 0,
+            autoEndOnWinners: round.autoEndOnWinners || false,
             leaderboard: winners.sort((a, b) => a.position - b.position).map(w => ({
                 position: w.position,
                 positionText: getPositionText(w.position),
@@ -802,7 +792,7 @@ router.get('/:code/winner', (req, res) => {
                 error: 'No hay ganadores aún',
                 gameState: round.gameState,
                 status: round.status,
-                maxWinners: round.maxWinners || 3
+                maxWinners: round.maxWinners || 999
             });
         }
         
@@ -820,10 +810,11 @@ router.get('/:code/winner', (req, res) => {
             // Información adicional de múltiples ganadores
             allWinners: round.winners,
             winnerCount: round.winners.length,
-            maxWinners: round.maxWinners || 3,
+            maxWinners: round.maxWinners || 999,
             isFirstWinner: true,
             position: firstWinner.position,
-            positionText: getPositionText(firstWinner.position)
+            positionText: getPositionText(firstWinner.position),
+            autoEndOnWinners: round.autoEndOnWinners || false
         });
         
     } catch (error) {
@@ -853,12 +844,13 @@ router.get('/:code/stats', (req, res) => {
                 totalPlayers: round.players.length,
                 maxPlayers: round.maxPlayers,
                 totalWinners: winners.length,
-                maxWinners: round.maxWinners || 3,
+                maxWinners: round.maxWinners || 999,
                 totalCardsCalled: totalCards,
                 maxCards: round.totalCardsAvailable || 24,
                 cardsRemaining: (round.totalCardsAvailable || 24) - totalCards,
                 gameStatus: round.status,
-                gameState: round.gameState
+                gameState: round.gameState,
+                autoEndOnWinners: round.autoEndOnWinners || false
             },
             timeStats: {
                 createdAt: round.createdAt,
@@ -923,6 +915,7 @@ router.post('/:code/reset', (req, res) => {
         round.gameFinishedTime = null;
         round.endTime = null;
         round.endReason = null;
+        round.autoEndOnWinners = false;
         
         // Limpiar marcas de jugadores
         round.players.forEach(player => {
@@ -935,7 +928,7 @@ router.post('/:code/reset', (req, res) => {
             success: true, 
             message: 'Partida reiniciada correctamente',
             playerCount: round.players.length,
-            maxWinners: round.maxWinners
+            autoEndOnWinners: round.autoEndOnWinners
         });
         
     } catch (error) {
@@ -944,7 +937,7 @@ router.post('/:code/reset', (req, res) => {
     }
 });
 
-// Función auxiliar para verificar bingo - MEJORADA para múltiples ganadores
+// Función auxiliar para verificar bingo - sin cambios
 function verifyBingo(markedTiles, playerBoard, calledNumbers, playerData = {}) {
     console.log("=== VERIFICANDO BINGO ===");
     console.log("Jugador:", playerData.playerName || "Desconocido");
