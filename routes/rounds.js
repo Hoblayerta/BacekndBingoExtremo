@@ -368,7 +368,7 @@ router.get('/:code/players', (req, res) => {
     }
 });
 
-// MEJORADO: Endpoint para que el host envíe una carta
+// MEJORADO: Endpoint para que el host envíe una carta - CON SOPORTE PARA TRIGGER CARTA 25
 router.post('/:code/call-card', (req, res) => {
     try {
         const { code } = req.params;
@@ -385,12 +385,50 @@ router.post('/:code/call-card', (req, res) => {
             return res.status(403).json({ error: 'Solo el host puede llamar cartas' });
         }
         
-        // MEJORADO: Permitir llamar cartas incluso si no está en 'active' para flexibilidad
         if (round.status === 'finished') {
             return res.status(400).json({ error: 'La partida ya ha terminado' });
         }
         
-        // Validar número de carta
+        // NUEVO: Manejar carta trigger especial (25) para CardDisplayScene
+        if (calledCard === 25) {
+            console.log(`🎯 CARTA TRIGGER (25) recibida - Para que CardDisplayScene muestre carta 24`);
+            
+            // No agregar carta 25 a calledNumbers, pero actualizar currentNumber
+            round.currentNumber = 25; // Trigger especial
+            round.lastCardTime = new Date();
+            
+            // NUEVO: Agregar al historial como trigger
+            if (!round.cardHistory) round.cardHistory = [];
+            round.cardHistory.push({
+                cardNumber: 25,
+                timestamp: new Date(),
+                hostEmail: hostEmail,
+                order: round.calledNumbers.length + 1,
+                isTrigger: true,
+                description: "Trigger para mostrar carta 24 en CardDisplayScene"
+            });
+            
+            console.log(`✅ Trigger 25 procesado - CardDisplayScene debería mostrar carta 24`);
+            
+            res.json({ 
+                success: true, 
+                calledCard: 25,
+                isTrigger: true,
+                triggerFor: 24,
+                totalCalled: round.calledNumbers.length, // Mantener en 24
+                calledNumbers: round.calledNumbers,
+                currentNumber: 25, // Para que CardDisplayScene procese
+                maxCards: 24,
+                gameState: round.gameState,
+                lastCardTime: round.lastCardTime,
+                allCardsCalled: true, // Ya se completaron las 24 reales
+                winners: round.winners || [],
+                winnerCount: round.winners ? round.winners.length : 0
+            });
+            return;
+        }
+        
+        // Validar número de carta normal (1-24)
         if (!calledCard || calledCard < 1 || calledCard > 24) {
             return res.status(400).json({ error: 'Número de carta inválido (debe ser 1-24)' });
         }
@@ -406,7 +444,7 @@ router.post('/:code/call-card', (req, res) => {
             });
         }
         
-        // MEJORADO: Agregar carta con información detallada
+        // MEJORADO: Agregar carta normal con información detallada
         const now = new Date();
         round.calledNumbers.push(calledCard);
         round.currentNumber = calledCard;
@@ -418,7 +456,8 @@ router.post('/:code/call-card', (req, res) => {
             cardNumber: calledCard,
             timestamp: now,
             hostEmail: hostEmail,
-            order: round.calledNumbers.length
+            order: round.calledNumbers.length,
+            isTrigger: false
         });
         
         // NUEVO: Cambiar estado a 'active' automáticamente al llamar primera carta
@@ -430,13 +469,13 @@ router.post('/:code/call-card', (req, res) => {
         }
         
         // MODIFICADO: Solo marcar como completado, NO terminar automáticamente
-        const allCardsCalled = round.calledNumbers.length >= (round.totalCardsAvailable || 24);
+        const allCardsCalled = round.calledNumbers.length >= 24;
         if (allCardsCalled && round.gameState !== 'completed') {
             round.gameState = 'completed';
-            console.log(`📋 Todas las cartas han sido llamadas en partida ${code} - Esperando que el host termine la partida`);
+            console.log(`📋 Todas las 24 cartas han sido llamadas en partida ${code} - Esperando que el host termine la partida`);
         }
         
-        console.log(`✅ Carta ${calledCard} llamada en partida ${code} (${round.calledNumbers.length}/${round.totalCardsAvailable || 24})`);
+        console.log(`✅ Carta ${calledCard} llamada en partida ${code} (${round.calledNumbers.length}/24)`);
         
         res.json({ 
             success: true, 
@@ -444,7 +483,7 @@ router.post('/:code/call-card', (req, res) => {
             totalCalled: round.calledNumbers.length,
             calledNumbers: round.calledNumbers,
             currentNumber: round.currentNumber,
-            maxCards: round.totalCardsAvailable || 24,
+            maxCards: 24,
             gameState: round.gameState,
             lastCardTime: round.lastCardTime,
             allCardsCalled: allCardsCalled,
@@ -461,7 +500,7 @@ router.post('/:code/call-card', (req, res) => {
     }
 });
 
-// MEJORADO: Endpoint para obtener estado del juego sin terminación automática
+// MEJORADO: Endpoint para obtener estado del juego - CON SOPORTE PARA TRIGGER
 router.get('/:code/status', (req, res) => {
     try {
         const { code } = req.params;
@@ -471,7 +510,7 @@ router.get('/:code/status', (req, res) => {
             return res.status(404).json({ error: 'Partida no encontrada' });
         }
         
-        // MEJORADO: Respuesta detallada sin límite automático de ganadores
+        // MEJORADO: Respuesta detallada con soporte para trigger
         const gameStatus = {
             code: round.code,
             status: round.status,
@@ -481,9 +520,13 @@ router.get('/:code/status', (req, res) => {
             calledNumbers: round.calledNumbers || [],
             currentNumber: round.currentNumber || null,
             totalCalled: round.calledNumbers ? round.calledNumbers.length : 0,
-            maxNumbers: round.totalCardsAvailable || 24,
-            remainingCards: (round.totalCardsAvailable || 24) - (round.calledNumbers ? round.calledNumbers.length : 0),
+            maxNumbers: 24,
+            remainingCards: 24 - (round.calledNumbers ? round.calledNumbers.length : 0),
             lastCardTime: round.lastCardTime || null,
+            
+            // NUEVO: Información del trigger
+            triggerSent: round.currentNumber === 25,
+            triggerFor: round.currentNumber === 25 ? 24 : null,
             
             // Información de tiempo
             createdAt: round.createdAt,
@@ -494,7 +537,7 @@ router.get('/:code/status', (req, res) => {
             playerCount: round.players.length,
             maxPlayers: round.maxPlayers,
             
-            // MODIFICADO: Sistema de ganadores sin límite automático
+            // Sistema de ganadores sin límite automático
             winners: round.winners || [],
             winnerCount: round.winners ? round.winners.length : 0,
             maxWinners: round.maxWinners || 999,
@@ -507,10 +550,10 @@ router.get('/:code/status', (req, res) => {
             winnerData: round.winners && round.winners.length > 0 ? round.winners[0] : null,
             
             // Estado del juego
-            allCardsCalled: (round.calledNumbers ? round.calledNumbers.length : 0) >= (round.totalCardsAvailable || 24),
-            canCallMoreCards: (round.calledNumbers ? round.calledNumbers.length : 0) < (round.totalCardsAvailable || 24) && round.status !== 'finished',
+            allCardsCalled: (round.calledNumbers ? round.calledNumbers.length : 0) >= 24,
+            canCallMoreCards: (round.calledNumbers ? round.calledNumbers.length : 0) < 24 && round.status !== 'finished',
             gameFinished: round.status === 'finished',
-            waitingForHostToEnd: round.status === 'active' && round.winners && round.winners.length > 0 // NUEVO
+            waitingForHostToEnd: round.status === 'active' && round.winners && round.winners.length > 0
         };
         
         // NUEVO: Agregar historial de cartas si se solicita
