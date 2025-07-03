@@ -5,7 +5,7 @@ function createTransporter() {
     return nodemailer.createTransport({
         service: 'Gmail',
         auth: {
-            user: process.env.EMAIL_USER || 'hoblayerta@gmail.com',
+            user: process.env.EMAIL_USER || 'tumail@gmail.com',
             pass: process.env.EMAIL_PASS || 'ocpd quim como suck'
         }
     });
