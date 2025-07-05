@@ -6,7 +6,7 @@ function createTransporter() {
         service: 'Gmail',
         auth: {
             user: process.env.EMAIL_USER || 'tumail@gmail.com',
-            pass: process.env.EMAIL_PASS || 'ocpd quim como suck'
+            pass: process.env.EMAIL_PASS || '**** **** **** ****'
         }
     });
 }
@@ -16,7 +16,7 @@ function sendConfirmationEmail(email, verificationCode, options = {}) {
     const { emailConsent = false, unsubscribeToken = '' } = options;
     
     // URL base del servidor (cambiar en producción)
-    const baseUrl = process.env.BASE_URL || 'https://tu-app-render.onrender.com';
+    const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
     const unsubscribeUrl = `${baseUrl}/api/auth/unsubscribe/${unsubscribeToken}`;
 
     let consentText = '';

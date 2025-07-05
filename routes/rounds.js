@@ -5,35 +5,721 @@ const emailUtils = require('../utils/email');
 // Simulación de una lista de partidas/sesiones
 let rounds = [];
 
-// Configuración de tableros predefinidos (10 tableros de 3x3)
-const PREDEFINED_BOARDS = [
+// ACTUALIZADO: 100 tableros predefinidos de 4x4 con cartas 1-54
+const PREDEFINED_BOARDS_4X4 = [
     // Tablero 1
-    [[12, 6, 10], [5, 2, 18], [24, 16, 1]],
+    [
+        [23, 41, 7, 52],
+        [15, 8, 34, 29],
+        [46, 12, 19, 3],
+        [37, 50, 26, 14]
+    ],
     // Tablero 2
-    [[9, 8, 17], [23, 20, 7], [15, 4, 14]],
+    [
+        [9, 48, 21, 35],
+        [54, 17, 6, 42],
+        [30, 11, 45, 18],
+        [4, 39, 25, 51]
+    ],
     // Tablero 3
-    [[5, 22, 19], [13, 12, 11], [21, 3, 1]],
+    [
+        [16, 32, 44, 5],
+        [40, 13, 27, 49],
+        [22, 53, 10, 36],
+        [1, 28, 47, 20]
+    ],
     // Tablero 4
-    [[10, 7, 14], [1, 23, 16], [21, 8, 17]],
+    [
+        [33, 2, 38, 24],
+        [50, 19, 43, 8],
+        [15, 52, 31, 46],
+        [7, 41, 12, 54]
+    ],
     // Tablero 5
-    [[13, 20, 18], [15, 11, 2], [9, 5, 6]],
+    [
+        [45, 18, 6, 29],
+        [34, 51, 14, 37],
+        [9, 26, 48, 21],
+        [53, 4, 39, 11]
+    ],
     // Tablero 6
-    [[4, 13, 16], [3, 8, 12], [19, 21, 20]],
+    [
+        [25, 47, 16, 3],
+        [42, 10, 35, 54],
+        [17, 44, 22, 30],
+        [5, 40, 13, 38]
+    ],
     // Tablero 7
-    [[5, 18, 10], [11, 7, 22], [19, 14, 15]],
+    [
+        [31, 6, 49, 24],
+        [12, 45, 19, 33],
+        [52, 28, 4, 41],
+        [8, 36, 50, 15]
+    ],
     // Tablero 8
-    [[3, 17, 2], [9, 6, 12], [20, 21, 24]],
+    [
+        [43, 20, 7, 46],
+        [29, 53, 11, 32],
+        [18, 2, 37, 48],
+        [51, 26, 9, 14]
+    ],
     // Tablero 9
-    [[7, 5, 18], [16, 17, 15], [14, 13, 1]],
+    [
+        [39, 16, 54, 23],
+        [6, 44, 27, 35],
+        [50, 13, 21, 3],
+        [42, 17, 45, 30]
+    ],
     // Tablero 10
-    [[15, 8, 3], [19, 11, 6], [24, 4, 22]]
+    [
+        [1, 34, 19, 47],
+        [25, 8, 52, 12],
+        [40, 49, 5, 38],
+        [22, 31, 46, 4]
+    ],
+    // Tablero 11
+    [
+        [36, 15, 28, 53],
+        [7, 41, 24, 18],
+        [48, 32, 10, 43],
+        [14, 51, 37, 26]
+    ],
+    // Tablero 12
+    [
+        [20, 9, 45, 33],
+        [54, 29, 6, 39],
+        [11, 47, 23, 16],
+        [35, 2, 50, 44]
+    ],
+    // Tablero 13
+    [
+        [27, 52, 13, 42],
+        [17, 4, 46, 21],
+        [38, 25, 8, 49],
+        [3, 36, 19, 31]
+    ],
+    // Tablero 14
+    [
+        [48, 12, 37, 5],
+        [22, 53, 30, 14],
+        [41, 18, 51, 28],
+        [7, 43, 15, 40]
+    ],
+    // Tablero 15
+    [
+        [34, 26, 1, 45],
+        [50, 9, 32, 24],
+        [16, 54, 39, 6],
+        [29, 11, 47, 35]
+    ],
+    // Tablero 16
+    [
+        [52, 21, 44, 13],
+        [3, 38, 15, 49],
+        [27, 4, 33, 54],
+        [10, 46, 8, 19]
+    ],
+    // Tablero 17
+    [
+        [41, 17, 2, 36],
+        [25, 51, 28, 5],
+        [12, 39, 23, 48],
+        [54, 7, 42, 31]
+    ],
+    // Tablero 18
+    [
+        [14, 50, 35, 22],
+        [47, 6, 53, 18],
+        [32, 45, 1, 40],
+        [9, 26, 37, 11]
+    ],
+    // Tablero 19
+    [
+        [38, 3, 24, 51],
+        [16, 43, 34, 8],
+        [49, 20, 15, 52],
+        [4, 33, 46, 27]
+    ],
+    // Tablero 20
+    [
+        [30, 44, 7, 19],
+        [53, 12, 41, 25],
+        [6, 48, 29, 54],
+        [21, 35, 13, 2]
+    ],
+    // Tablero 21
+    [
+        [17, 39, 50, 5],
+        [42, 28, 9, 45],
+        [1, 36, 18, 47],
+        [26, 14, 52, 37]
+    ],
+    // Tablero 22
+    [
+        [46, 23, 8, 34],
+        [11, 49, 32, 3],
+        [54, 15, 43, 20],
+        [38, 4, 51, 16]
+    ],
+    // Tablero 23
+    [
+        [22, 6, 40, 48],
+        [35, 53, 24, 12],
+        [19, 31, 7, 44],
+        [50, 25, 1, 33]
+    ],
+    // Tablero 24
+    [
+        [13, 47, 27, 41],
+        [18, 2, 46, 30],
+        [52, 39, 14, 5],
+        [36, 21, 54, 9]
+    ],
+    // Tablero 25
+    [
+        [45, 32, 16, 51],
+        [8, 26, 49, 37],
+        [3, 42, 23, 15],
+        [53, 10, 38, 28]
+    ],
+    // Tablero 26
+    [
+        [29, 17, 43, 6],
+        [44, 11, 1, 52],
+        [25, 48, 35, 4],
+        [19, 54, 12, 40]
+    ],
+    // Tablero 27
+    [
+        [31, 50, 18, 24],
+        [7, 36, 45, 22],
+        [47, 9, 32, 51],
+        [14, 41, 2, 34]
+    ],
+    // Tablero 28
+    [
+        [5, 23, 54, 39],
+        [46, 13, 27, 16],
+        [33, 52, 8, 42],
+        [20, 3, 49, 26]
+    ],
+    // Tablero 29
+    [
+        [44, 30, 15, 1],
+        [53, 21, 38, 47],
+        [6, 35, 50, 17],
+        [28, 43, 11, 25]
+    ],
+    // Tablero 30
+    [
+        [12, 48, 37, 4],
+        [19, 40, 54, 29],
+        [45, 7, 24, 33],
+        [51, 18, 2, 46]
+    ],
+    // Tablero 31
+    [
+        [36, 14, 22, 52],
+        [9, 31, 16, 41],
+        [49, 26, 5, 39],
+        [3, 44, 53, 20]
+    ],
+    // Tablero 32
+    [
+        [47, 8, 35, 13],
+        [27, 50, 42, 6],
+        [15, 1, 48, 32],
+        [54, 23, 34, 17]
+    ],
+    // Tablero 33
+    [
+        [21, 43, 10, 45],
+        [38, 4, 51, 25],
+        [18, 37, 29, 53],
+        [7, 33, 46, 12]
+    ],
+    // Tablero 34
+    [
+        [40, 19, 2, 28],
+        [52, 24, 14, 49],
+        [36, 6, 41, 16],
+        [30, 54, 9, 44]
+    ],
+    // Tablero 35
+    [
+        [26, 51, 39, 11],
+        [3, 47, 20, 35],
+        [45, 22, 54, 8],
+        [15, 42, 31, 1]
+    ],
+    // Tablero 36
+    [
+        [48, 5, 17, 33],
+        [13, 38, 46, 27],
+        [50, 12, 25, 43],
+        [4, 29, 53, 37]
+    ],
+    // Tablero 37
+    [
+        [34, 41, 18, 7],
+        [52, 16, 2, 48],
+        [23, 49, 36, 14],
+        [44, 30, 6, 51]
+    ],
+    // Tablero 38
+    [
+        [9, 24, 47, 40],
+        [35, 54, 19, 3],
+        [21, 32, 45, 28],
+        [1, 39, 15, 50]
+    ],
+    // Tablero 39
+    [
+        [46, 11, 31, 22],
+        [8, 42, 53, 26],
+        [37, 4, 17, 41],
+        [33, 20, 52, 6]
+    ],
+    // Tablero 40
+    [
+        [25, 48, 12, 38],
+        [49, 18, 43, 5],
+        [54, 29, 9, 16],
+        [2, 36, 47, 23]
+    ],
+    // Tablero 41
+    [
+        [13, 35, 51, 19],
+        [44, 7, 30, 45],
+        [27, 53, 3, 34],
+        [40, 14, 24, 1]
+    ],
+    // Tablero 42
+    [
+        [32, 21, 6, 50],
+        [17, 39, 54, 11],
+        [46, 8, 28, 42],
+        [4, 48, 15, 37]
+    ],
+    // Tablero 43
+    [
+        [52, 26, 41, 10],
+        [22, 3, 49, 36],
+        [18, 45, 31, 5],
+        [47, 33, 9, 25]
+    ],
+    // Tablero 44
+    [
+        [7, 43, 20, 54],
+        [38, 51, 12, 16],
+        [2, 24, 53, 35],
+        [29, 19, 46, 8]
+    ],
+    // Tablero 45
+    [
+        [44, 14, 39, 27],
+        [6, 48, 21, 1],
+        [50, 34, 4, 40],
+        [17, 52, 23, 30]
+    ],
+    // Tablero 46
+    [
+        [15, 37, 47, 13],
+        [54, 5, 32, 42],
+        [26, 49, 11, 18],
+        [3, 41, 28, 45]
+    ],
+    // Tablero 47
+    [
+        [31, 9, 25, 52],
+        [43, 20, 38, 7],
+        [12, 51, 46, 33],
+        [48, 2, 16, 35]
+    ],
+    // Tablero 48
+    [
+        [24, 50, 4, 19],
+        [36, 14, 53, 29],
+        [8, 40, 22, 47],
+        [54, 17, 39, 6]
+    ],
+    // Tablero 49
+    [
+        [41, 26, 15, 44],
+        [1, 45, 37, 23],
+        [49, 11, 34, 52],
+        [21, 5, 48, 30]
+    ],
+    // Tablero 50
+    [
+        [18, 32, 53, 3],
+        [46, 27, 9, 51],
+        [38, 6, 19, 42],
+        [13, 35, 50, 28]
+    ],
+    // Tablero 51
+    [
+        [33, 47, 12, 40],
+        [54, 22, 4, 16],
+        [7, 43, 31, 25],
+        [39, 1, 45, 20]
+    ],
+    // Tablero 52
+    [
+        [29, 8, 36, 49],
+        [15, 52, 24, 37],
+        [44, 17, 2, 53],
+        [26, 41, 14, 6]
+    ],
+    // Tablero 53
+    [
+        [48, 21, 46, 11],
+        [3, 34, 50, 19],
+        [35, 51, 27, 9],
+        [5, 30, 42, 18]
+    ],
+    // Tablero 54
+    [
+        [23, 54, 38, 32],
+        [40, 13, 1, 45],
+        [16, 28, 52, 4],
+        [47, 7, 33, 25]
+    ],
+    // Tablero 55
+    [
+        [10, 39, 17, 49],
+        [51, 24, 43, 8],
+        [29, 2, 44, 36],
+        [20, 46, 12, 53]
+    ],
+    // Tablero 56
+    [
+        [37, 6, 31, 14],
+        [48, 35, 18, 50],
+        [5, 41, 26, 1],
+        [54, 22, 38, 15]
+    ],
+    // Tablero 57
+    [
+        [42, 19, 9, 27],
+        [13, 47, 52, 34],
+        [3, 30, 16, 45],
+        [23, 11, 49, 40]
+    ],
+    // Tablero 58
+    [
+        [25, 44, 53, 4],
+        [32, 8, 21, 39],
+        [54, 18, 7, 28],
+        [12, 51, 36, 46]
+    ],
+    // Tablero 59
+    [
+        [20, 2, 43, 35],
+        [47, 29, 15, 5],
+        [41, 33, 50, 17],
+        [6, 38, 24, 52]
+    ],
+    // Tablero 60
+    [
+        [31, 53, 26, 10],
+        [14, 42, 48, 22],
+        [37, 1, 39, 49],
+        [45, 16, 4, 34]
+    ],
+    // Tablero 61
+    [
+        [48, 3, 19, 45],
+        [25, 51, 9, 36],
+        [13, 40, 54, 21],
+        [32, 7, 43, 18]
+    ],
+    // Tablero 62
+    [
+        [29, 46, 6, 52],
+        [17, 2, 35, 41],
+        [50, 23, 12, 38],
+        [4, 31, 47, 26]
+    ],
+    // Tablero 63
+    [
+        [15, 42, 30, 1],
+        [53, 28, 44, 11],
+        [8, 37, 49, 24],
+        [39, 54, 5, 33]
+    ],
+    // Tablero 64
+    [
+        [22, 14, 48, 34],
+        [40, 16, 27, 52],
+        [6, 45, 20, 3],
+        [51, 9, 35, 19]
+    ],
+    // Tablero 65
+    [
+        [41, 25, 7, 47],
+        [32, 50, 21, 13],
+        [18, 4, 46, 53],
+        [36, 43, 1, 29]
+    ],
+    // Tablero 66
+    [
+        [49, 17, 33, 8],
+        [24, 39, 54, 15],
+        [2, 26, 42, 44],
+        [51, 12, 30, 38]
+    ],
+    // Tablero 67
+    [
+        [35, 5, 52, 23],
+        [45, 31, 10, 48],
+        [19, 53, 37, 6],
+        [14, 27, 41, 3]
+    ],
+    // Tablero 68
+    [
+        [11, 43, 28, 50],
+        [54, 18, 4, 32],
+        [40, 9, 25, 47],
+        [20, 36, 15, 1]
+    ],
+    // Tablero 69
+    [
+        [26, 38, 13, 44],
+        [7, 49, 35, 21],
+        [51, 16, 2, 30],
+        [42, 24, 53, 8]
+    ],
+    // Tablero 70
+    [
+        [33, 46, 22, 6],
+        [29, 12, 48, 39],
+        [17, 54, 31, 45],
+        [5, 19, 37, 52]
+    ],
+    // Tablero 71
+    [
+        [14, 1, 41, 27],
+        [50, 34, 18, 4],
+        [23, 47, 10, 36],
+        [53, 25, 43, 16]
+    ],
+    // Tablero 72
+    [
+        [40, 51, 15, 32],
+        [8, 24, 46, 2],
+        [35, 49, 6, 28],
+        [19, 42, 54, 11]
+    ],
+    // Tablero 73
+    [
+        [37, 20, 9, 48],
+        [13, 44, 52, 26],
+        [3, 33, 21, 50],
+        [45, 7, 38, 30]
+    ],
+    // Tablero 74
+    [
+        [22, 39, 47, 5],
+        [54, 17, 31, 43],
+        [12, 41, 18, 1],
+        [29, 4, 49, 34]
+    ],
+    // Tablero 75
+    [
+        [46, 8, 25, 53],
+        [35, 51, 14, 19],
+        [42, 28, 36, 6],
+        [2, 48, 23, 40]
+    ],
+    // Tablero 76
+    [
+        [16, 32, 50, 24],
+        [41, 3, 45, 37],
+        [54, 15, 27, 9],
+        [21, 38, 11, 47]
+    ],
+    // Tablero 77
+    [
+        [30, 44, 4, 18],
+        [52, 26, 39, 13],
+        [7, 49, 33, 51],
+        [43, 20, 1, 35]
+    ],
+    // Tablero 78
+    [
+        [25, 12, 46, 31],
+        [6, 48, 22, 42],
+        [38, 5, 50, 17],
+        [53, 34, 8, 28]
+    ],
+    // Tablero 79
+    [
+        [41, 29, 54, 14],
+        [19, 37, 2, 45],
+        [32, 24, 47, 10],
+        [9, 44, 16, 52]
+    ],
+    // Tablero 80
+    [
+        [36, 15, 3, 49],
+        [27, 53, 40, 21],
+        [1, 43, 30, 39],
+        [51, 11, 26, 4]
+    ],
+    // Tablero 81
+    [
+        [23, 48, 35, 7],
+        [45, 18, 52, 33],
+        [6, 38, 13, 46],
+        [20, 2, 41, 25]
+    ],
+    // Tablero 82
+    [
+        [50, 31, 17, 42],
+        [8, 34, 47, 54],
+        [26, 12, 40, 5],
+        [37, 49, 21, 15]
+    ],
+    // Tablero 83
+    [
+        [44, 9, 28, 36],
+        [53, 22, 1, 39],
+        [14, 51, 24, 48],
+        [4, 32, 45, 19]
+    ],
+    // Tablero 84
+    [
+        [16, 41, 52, 30],
+        [43, 6, 25, 11],
+        [35, 47, 3, 54],
+        [27, 18, 38, 7]
+    ],
+    // Tablero 85
+    [
+        [20, 33, 46, 2],
+        [49, 15, 37, 29],
+        [51, 39, 8, 23],
+        [12, 44, 50, 34]
+    ],
+    // Tablero 86
+    [
+        [5, 26, 42, 48],
+        [17, 52, 31, 40],
+        [45, 1, 19, 53],
+        [36, 13, 4, 24]
+    ],
+    // Tablero 87
+    [
+        [32, 47, 21, 9],
+        [54, 14, 43, 6],
+        [28, 38, 16, 50],
+        [3, 41, 35, 22]
+    ],
+    // Tablero 88
+    [
+        [39, 11, 49, 25],
+        [7, 30, 18, 51],
+        [44, 52, 37, 12],
+        [15, 2, 46, 33]
+    ],
+    // Tablero 89
+    [
+        [23, 54, 8, 40],
+        [36, 19, 42, 27],
+        [4, 45, 29, 1],
+        [48, 17, 53, 31]
+    ],
+    // Tablero 90
+    [
+        [13, 35, 50, 24],
+        [47, 5, 20, 44],
+        [32, 41, 14, 6],
+        [51, 26, 38, 9]
+    ],
+    // Tablero 91
+    [
+        [30, 2, 43, 52],
+        [21, 49, 16, 34],
+        [54, 7, 25, 39],
+        [18, 46, 10, 37]
+    ],
+    // Tablero 92
+    [
+        [45, 28, 1, 15],
+        [12, 53, 33, 48],
+        [40, 22, 51, 8],
+        [6, 35, 41, 19]
+    ],
+    // Tablero 93
+    [
+        [27, 42, 17, 4],
+        [50, 24, 9, 38],
+        [3, 31, 47, 44],
+        [52, 14, 23, 36]
+    ],
+    // Tablero 94
+    [
+        [11, 39, 54, 29],
+        [46, 20, 5, 32],
+        [18, 49, 26, 2],
+        [41, 7, 43, 16]
+    ],
+    // Tablero 95
+    [
+        [34, 48, 13, 51],
+        [8, 37, 45, 22],
+        [53, 15, 35, 1],
+        [25, 30, 6, 40]
+    ],
+    // Tablero 96
+    [
+        [19, 4, 47, 33],
+        [52, 28, 14, 41],
+        [21, 50, 9, 36],
+        [44, 12, 54, 27]
+    ],
+    // Tablero 97
+    [
+        [38, 17, 31, 5],
+        [24, 46, 53, 16],
+        [49, 3, 42, 35],
+        [10, 39, 18, 48]
+    ],
+    // Tablero 98
+    [
+        [45, 23, 26, 54],
+        [1, 37, 50, 7],
+        [32, 43, 20, 11],
+        [52, 29, 15, 2]
+    ],
+    // Tablero 99
+    [
+        [6, 44, 34, 41],
+        [49, 13, 4, 30],
+        [25, 51, 47, 19],
+        [38, 8, 22, 53]
+    ],
+    // Tablero 100
+    [
+        [33, 8, 51, 19],
+        [45, 27, 4, 38],
+        [12, 49, 22, 54],
+        [6, 41, 15, 30]
+    ]
 ];
+
+// ACTUALIZADO: Constantes para 54 cartas y 100 tableros
+const MAX_CARDS = 54;
+const MAX_BOARDS = 100;
+const BOARD_SIZE = 16; // 4x4
+const TRIGGER_CARD = 55; // Carta especial para trigger (fuera del rango normal)
 
 router.post('/create', async (req, res) => {
     try {
-        const { code, hostEmail, hostPassword, maxPlayers = 10, maxWinners = 999 } = req.body; // CAMBIADO: maxWinners alto por defecto
+        const { code, hostEmail, hostPassword, maxPlayers = 10, maxWinners = 999 } = req.body;
         
-        console.log(`🎯 Creando partida: ${code} para ${hostEmail}`);
+        console.log(`🎯 Creando partida: ${code} para ${hostEmail} (54 cartas, 100 tableros)`);
         
         // Validar que se proporcione un código
         if (!code) {
@@ -61,7 +747,7 @@ router.post('/create', async (req, res) => {
             return res.status(400).json({ error: 'Ya tienes una partida activa' });
         }
         
-        // MODIFICADO: Crear nueva partida sin límite automático de ganadores
+        // ACTUALIZADO: Crear nueva partida para 54 cartas y 100 tableros
         const newRound = {
             code: code,
             hostEmail: hostEmail,
@@ -73,23 +759,25 @@ router.post('/create', async (req, res) => {
                 email: hostEmail,
                 joinedAt: new Date()
             },
-            boards: PREDEFINED_BOARDS.slice(0, maxPlayers), // Asignar tableros según maxPlayers
-            takenBoards: [], // Array para rastrear tableros ocupados
+            // ACTUALIZADO: Usar tableros 4x4 con 100 opciones
+            boards: PREDEFINED_BOARDS_4X4.slice(0, MAX_BOARDS),
+            takenBoards: [],
             calledNumbers: [],
             currentNumber: null,
             
-            // MODIFICADO: Sin límite automático de ganadores
-            winners: [],                    // Array de ganadores (sin límite)
-            maxWinners: 999,               // Sin límite práctico
-            winnerCount: 0,                // Contador actual de ganadores
-            allowMultipleWinners: true,    // Permitir múltiples ganadores
-            gameFinishedTime: null,        // Solo se establece cuando el host termina
-            autoEndOnWinners: false,       // NUEVO: Desactivar terminación automática
+            // Sistema de ganadores
+            winners: [],
+            maxWinners: 999,
+            winnerCount: 0,
+            allowMultipleWinners: true,
+            gameFinishedTime: null,
+            autoEndOnWinners: false,
             
-            // CAMPOS para mejor tracking
+            // ACTUALIZADO: Campos para 54 cartas
             lastCardTime: null,
             cardHistory: [],
-            totalCardsAvailable: 24,
+            totalCardsAvailable: MAX_CARDS,
+            maxCards: MAX_CARDS,
             gameStartTime: null,
             
             gameState: 'lobby' // lobby, playing, paused, ended
@@ -97,7 +785,7 @@ router.post('/create', async (req, res) => {
         
         rounds.push(newRound);
         
-        // Enviar código por email al host junto con su contraseña
+        // Enviar código por email al host
         if (hostPassword) {
             try {
                 emailUtils.sendRoundCodeEmail(hostEmail, code, hostPassword);
@@ -106,7 +794,7 @@ router.post('/create', async (req, res) => {
             }
         }
         
-        console.log(`✅ Partida creada con código: ${code} por ${hostEmail} (Control manual por host)`);
+        console.log(`✅ Partida creada con código: ${code} por ${hostEmail} (54 cartas, 100 tableros 4x4)`);
         res.json({ 
             success: true, 
             message: 'Partida creada correctamente',
@@ -114,6 +802,9 @@ router.post('/create', async (req, res) => {
             roundId: rounds.length - 1,
             maxPlayers: newRound.maxPlayers,
             maxWinners: newRound.maxWinners,
+            maxCards: MAX_CARDS,
+            maxBoards: MAX_BOARDS,
+            boardSize: BOARD_SIZE,
             autoEndOnWinners: newRound.autoEndOnWinners,
             boards: newRound.boards.length
         });
@@ -134,14 +825,13 @@ router.get('/list', (req, res) => {
             maxPlayers: r.maxPlayers,
             gameState: r.gameState,
             hostEmail: r.hostEmail,
-            // MODIFICADO: Información de ganadores sin límite
             winners: r.winners || [],
             winnerCount: r.winners ? r.winners.length : 0,
             maxWinners: r.maxWinners || 999,
             autoEndOnWinners: r.autoEndOnWinners || false,
-            // CAMPOS para CardDisplayScene
             totalCalled: r.calledNumbers ? r.calledNumbers.length : 0,
-            currentNumber: r.currentNumber || null
+            currentNumber: r.currentNumber || null,
+            maxCards: MAX_CARDS
         }));
         res.json(safeRounds);
     } catch (error) {
@@ -173,14 +863,13 @@ router.get('/:code', (req, res) => {
             })),
             hostEmail: round.hostEmail,
             takenBoards: round.takenBoards,
-            // MODIFICADO: Información de ganadores sin límite automático
             winners: round.winners || [],
             winnerCount: round.winners ? round.winners.length : 0,
             maxWinners: round.maxWinners || 999,
             autoEndOnWinners: round.autoEndOnWinners || false,
-            // CAMPOS para CardDisplayScene
             totalCalled: round.calledNumbers ? round.calledNumbers.length : 0,
-            currentNumber: round.currentNumber || null
+            currentNumber: round.currentNumber || null,
+            maxCards: MAX_CARDS
         });
     } catch (error) {
         console.error('❌ Error getting round:', error);
@@ -368,7 +1057,7 @@ router.get('/:code/players', (req, res) => {
     }
 });
 
-// MEJORADO: Endpoint para que el host envíe una carta - CON SOPORTE PARA TRIGGER CARTA 25
+// ACTUALIZADO: Endpoint para enviar cartas (1-54) con soporte para trigger
 router.post('/:code/call-card', (req, res) => {
     try {
         const { code } = req.params;
@@ -389,51 +1078,51 @@ router.post('/:code/call-card', (req, res) => {
             return res.status(400).json({ error: 'La partida ya ha terminado' });
         }
         
-        // NUEVO: Manejar carta trigger especial (25) para CardDisplayScene
-        if (calledCard === 25) {
-            console.log(`🎯 CARTA TRIGGER (25) recibida - Para que CardDisplayScene muestre carta 24`);
+        // ACTUALIZADO: Manejar carta trigger especial (55) para CardDisplayScene
+        if (calledCard === TRIGGER_CARD) {
+            console.log(`🎯 CARTA TRIGGER (${TRIGGER_CARD}) recibida - Para que CardDisplayScene muestre carta ${MAX_CARDS}`);
             
-            // No agregar carta 25 a calledNumbers, pero actualizar currentNumber
-            round.currentNumber = 25; // Trigger especial
+            round.currentNumber = TRIGGER_CARD; // Trigger especial
             round.lastCardTime = new Date();
             
-            // NUEVO: Agregar al historial como trigger
             if (!round.cardHistory) round.cardHistory = [];
             round.cardHistory.push({
-                cardNumber: 25,
+                cardNumber: TRIGGER_CARD,
                 timestamp: new Date(),
                 hostEmail: hostEmail,
                 order: round.calledNumbers.length + 1,
                 isTrigger: true,
-                description: "Trigger para mostrar carta 24 en CardDisplayScene"
+                description: `Trigger para mostrar carta ${MAX_CARDS} en CardDisplayScene`
             });
             
-            console.log(`✅ Trigger 25 procesado - CardDisplayScene debería mostrar carta 24`);
+            console.log(`✅ Trigger ${TRIGGER_CARD} procesado - CardDisplayScene debería mostrar carta ${MAX_CARDS}`);
             
             res.json({ 
                 success: true, 
-                calledCard: 25,
+                calledCard: TRIGGER_CARD,
                 isTrigger: true,
-                triggerFor: 24,
-                totalCalled: round.calledNumbers.length, // Mantener en 24
+                triggerFor: MAX_CARDS,
+                totalCalled: round.calledNumbers.length,
                 calledNumbers: round.calledNumbers,
-                currentNumber: 25, // Para que CardDisplayScene procese
-                maxCards: 24,
+                currentNumber: TRIGGER_CARD,
+                maxCards: MAX_CARDS,
                 gameState: round.gameState,
                 lastCardTime: round.lastCardTime,
-                allCardsCalled: true, // Ya se completaron las 24 reales
+                allCardsCalled: round.calledNumbers.length >= MAX_CARDS,
                 winners: round.winners || [],
                 winnerCount: round.winners ? round.winners.length : 0
             });
             return;
         }
         
-        // Validar número de carta normal (1-24)
-        if (!calledCard || calledCard < 1 || calledCard > 24) {
-            return res.status(400).json({ error: 'Número de carta inválido (debe ser 1-24)' });
+        // ACTUALIZADO: Validar número de carta normal (1-54)
+        if (!calledCard || calledCard < 1 || calledCard > MAX_CARDS) {
+            return res.status(400).json({ 
+                error: `Número de carta inválido (debe ser 1-${MAX_CARDS})` 
+            });
         }
         
-        // MEJORADO: Prevenir cartas duplicadas
+        // Prevenir cartas duplicadas
         if (round.calledNumbers.includes(calledCard)) {
             console.log(`⚠️  Carta ${calledCard} ya fue llamada en partida ${code}`);
             return res.status(400).json({ 
@@ -444,13 +1133,12 @@ router.post('/:code/call-card', (req, res) => {
             });
         }
         
-        // MEJORADO: Agregar carta normal con información detallada
+        // Agregar carta normal
         const now = new Date();
         round.calledNumbers.push(calledCard);
         round.currentNumber = calledCard;
         round.lastCardTime = now;
         
-        // NUEVO: Agregar al historial detallado
         if (!round.cardHistory) round.cardHistory = [];
         round.cardHistory.push({
             cardNumber: calledCard,
@@ -460,7 +1148,7 @@ router.post('/:code/call-card', (req, res) => {
             isTrigger: false
         });
         
-        // NUEVO: Cambiar estado a 'active' automáticamente al llamar primera carta
+        // Iniciar automáticamente al llamar primera carta
         if (round.status === 'waiting' && round.calledNumbers.length === 1) {
             round.status = 'active';
             round.gameState = 'playing';
@@ -468,14 +1156,14 @@ router.post('/:code/call-card', (req, res) => {
             console.log(`🚀 Partida ${code} iniciada automáticamente al llamar primera carta`);
         }
         
-        // MODIFICADO: Solo marcar como completado, NO terminar automáticamente
-        const allCardsCalled = round.calledNumbers.length >= 24;
+        // ACTUALIZADO: Marcar como completado cuando se llegue a 54 cartas
+        const allCardsCalled = round.calledNumbers.length >= MAX_CARDS;
         if (allCardsCalled && round.gameState !== 'completed') {
             round.gameState = 'completed';
-            console.log(`📋 Todas las 24 cartas han sido llamadas en partida ${code} - Esperando que el host termine la partida`);
+            console.log(`📋 Todas las ${MAX_CARDS} cartas han sido llamadas en partida ${code} - Esperando que el host termine la partida`);
         }
         
-        console.log(`✅ Carta ${calledCard} llamada en partida ${code} (${round.calledNumbers.length}/24)`);
+        console.log(`✅ Carta ${calledCard} llamada en partida ${code} (${round.calledNumbers.length}/${MAX_CARDS})`);
         
         res.json({ 
             success: true, 
@@ -483,11 +1171,10 @@ router.post('/:code/call-card', (req, res) => {
             totalCalled: round.calledNumbers.length,
             calledNumbers: round.calledNumbers,
             currentNumber: round.currentNumber,
-            maxCards: 24,
+            maxCards: MAX_CARDS,
             gameState: round.gameState,
             lastCardTime: round.lastCardTime,
             allCardsCalled: allCardsCalled,
-            // Información de ganadores
             winners: round.winners || [],
             winnerCount: round.winners ? round.winners.length : 0,
             maxWinners: round.maxWinners || 999,
@@ -500,7 +1187,7 @@ router.post('/:code/call-card', (req, res) => {
     }
 });
 
-// MEJORADO: Endpoint para obtener estado del juego - CON SOPORTE PARA TRIGGER
+// ACTUALIZADO: Estado del juego con soporte para 54 cartas
 router.get('/:code/status', (req, res) => {
     try {
         const { code } = req.params;
@@ -510,23 +1197,22 @@ router.get('/:code/status', (req, res) => {
             return res.status(404).json({ error: 'Partida no encontrada' });
         }
         
-        // MEJORADO: Respuesta detallada con soporte para trigger
         const gameStatus = {
             code: round.code,
             status: round.status,
             gameState: round.gameState,
             
-            // Información de cartas
+            // ACTUALIZADO: Información de cartas para 54 cartas
             calledNumbers: round.calledNumbers || [],
             currentNumber: round.currentNumber || null,
             totalCalled: round.calledNumbers ? round.calledNumbers.length : 0,
-            maxNumbers: 24,
-            remainingCards: 24 - (round.calledNumbers ? round.calledNumbers.length : 0),
+            maxNumbers: MAX_CARDS,
+            remainingCards: MAX_CARDS - (round.calledNumbers ? round.calledNumbers.length : 0),
             lastCardTime: round.lastCardTime || null,
             
-            // NUEVO: Información del trigger
-            triggerSent: round.currentNumber === 25,
-            triggerFor: round.currentNumber === 25 ? 24 : null,
+            // Información del trigger
+            triggerSent: round.currentNumber === TRIGGER_CARD,
+            triggerFor: round.currentNumber === TRIGGER_CARD ? MAX_CARDS : null,
             
             // Información de tiempo
             createdAt: round.createdAt,
@@ -537,26 +1223,26 @@ router.get('/:code/status', (req, res) => {
             playerCount: round.players.length,
             maxPlayers: round.maxPlayers,
             
-            // Sistema de ganadores sin límite automático
+            // Sistema de ganadores
             winners: round.winners || [],
             winnerCount: round.winners ? round.winners.length : 0,
             maxWinners: round.maxWinners || 999,
             allowMultipleWinners: round.allowMultipleWinners !== false,
             autoEndOnWinners: round.autoEndOnWinners || false,
             
-            // Compatibilidad con sistema anterior (primer ganador)
+            // Compatibilidad
             winner: round.winners && round.winners.length > 0 ? round.winners[0].playerName : null,
             winnerTime: round.winners && round.winners.length > 0 ? round.winners[0].winnerTime : null,
             winnerData: round.winners && round.winners.length > 0 ? round.winners[0] : null,
             
-            // Estado del juego
-            allCardsCalled: (round.calledNumbers ? round.calledNumbers.length : 0) >= 24,
-            canCallMoreCards: (round.calledNumbers ? round.calledNumbers.length : 0) < 24 && round.status !== 'finished',
+            // ACTUALIZADO: Estado del juego para 54 cartas
+            allCardsCalled: (round.calledNumbers ? round.calledNumbers.length : 0) >= MAX_CARDS,
+            canCallMoreCards: (round.calledNumbers ? round.calledNumbers.length : 0) < MAX_CARDS && round.status !== 'finished',
             gameFinished: round.status === 'finished',
             waitingForHostToEnd: round.status === 'active' && round.winners && round.winners.length > 0
         };
         
-        // NUEVO: Agregar historial de cartas si se solicita
+        // Agregar historial si se solicita
         if (req.query.includeHistory === 'true') {
             gameStatus.cardHistory = round.cardHistory || [];
         }
@@ -569,7 +1255,7 @@ router.get('/:code/status', (req, res) => {
     }
 });
 
-// MODIFICADO: Endpoint para verificar bingo SIN terminación automática
+// ACTUALIZADO: Verificación de bingo para tableros 4x4
 router.post('/:code/bingo', (req, res) => {
     try {
         const { code } = req.params;
@@ -581,7 +1267,7 @@ router.post('/:code/bingo', (req, res) => {
             calledCardsWhenClaimed = null 
         } = req.body;
         
-        console.log(`🎯 Verificación de BINGO de ${playerName} en partida ${code}`);
+        console.log(`🎯 Verificación de BINGO de ${playerName} en partida ${code} (tablero 4x4)`);
         
         const round = rounds.find(r => r.code === code);
         if (!round) {
@@ -595,9 +1281,7 @@ router.post('/:code/bingo', (req, res) => {
             });
         }
         
-        // ELIMINADO: Verificación de límite máximo de ganadores
-        
-        // MODIFICADO: Verificar si este jugador ya ganó
+        // Verificar si este jugador ya ganó
         if (round.winners && round.winners.some(w => w.playerName === playerName)) {
             const existingWinner = round.winners.find(w => w.playerName === playerName);
             return res.status(400).json({ 
@@ -615,26 +1299,23 @@ router.post('/:code/bingo', (req, res) => {
             });
         }
         
-        // VERIFICACIÓN DE BINGO
-        const verification = verifyBingo(markedTiles, playerBoard, round.calledNumbers, {
+        // ACTUALIZADO: Verificación de bingo para tablero 4x4
+        const verification = verifyBingo4x4(markedTiles, playerBoard, round.calledNumbers, {
             playerName: playerName,
             boardId: boardId,
             calledCardsWhenClaimed: calledCardsWhenClaimed
         });
         
         if (verification.valid) {
-            // ¡BINGO VÁLIDO! - Agregar como ganador SIN terminar automáticamente
+            // ¡BINGO VÁLIDO! - Agregar como ganador
             
-            // Inicializar array de ganadores si no existe
             if (!round.winners) {
                 round.winners = [];
             }
             
-            // Determinar posición del ganador
             const position = round.winners.length + 1;
             const winnerTime = new Date();
             
-            // Crear datos del ganador
             const winnerData = {
                 playerName: playerName,
                 position: position,
@@ -647,17 +1328,11 @@ router.post('/:code/bingo', (req, res) => {
                 verificationDetails: verification
             };
             
-            // Agregar ganador a la lista
             round.winners.push(winnerData);
             round.winnerCount = round.winners.length;
             
-            // MODIFICADO: NO terminar automáticamente el juego
-            // El juego solo termina cuando el host presiona el botón BtnEndRound
             console.log(`🏆 Ganador ${position}° lugar: ${playerName} - Partida continúa hasta que el host la termine`);
             
-            console.log(`✅ BINGO VÁLIDO - ${playerName} es el ${position}° ganador en partida ${code} (Esperando terminación manual)`);
-            
-            // RESPUESTA DE ÉXITO - sin terminación automática
             res.json({ 
                 success: true, 
                 playerName: playerName,
@@ -670,10 +1345,10 @@ router.post('/:code/bingo', (req, res) => {
                     positionText: getPositionText(w.position),
                     time: w.winnerTime
                 })),
-                gameFinished: false, // SIEMPRE falso hasta que el host termine
-                waitingForHostToEnd: true, // NUEVO: Indicar que se espera al host
+                gameFinished: false,
+                waitingForHostToEnd: true,
                 totalWinners: round.winners.length,
-                gameStillActive: true // NUEVO: Confirmar que el juego sigue activo
+                gameStillActive: true
             });
             
         } else {
@@ -703,7 +1378,7 @@ router.post('/:code/bingo', (req, res) => {
     }
 });
 
-// MODIFICADO: Endpoint para terminar partida (SOLO el host puede terminar)
+// Endpoint para terminar partida (SOLO el host puede terminar)
 router.post('/:code/end', (req, res) => {
     try {
         const { code } = req.params;
@@ -729,12 +1404,11 @@ router.post('/:code/end', (req, res) => {
         round.gameState = 'ended';
         round.endReason = reason || 'host_ended';
         round.endTime = new Date();
-        round.gameFinishedTime = round.endTime; // Establecer tiempo de finalización
+        round.gameFinishedTime = round.endTime;
         
         console.log(`✅ Partida ${code} terminada por el host ${hostEmail}`);
         console.log(`📊 Ganadores finales: ${round.winners ? round.winners.length : 0} jugadores`);
         
-        // Respuesta con información completa de finalización
         res.json({ 
             success: true, 
             message: 'Partida terminada correctamente por el host',
@@ -755,7 +1429,7 @@ router.post('/:code/end', (req, res) => {
     }
 });
 
-// NUEVO: Endpoint para obtener historial detallado de cartas
+// Endpoint para obtener historial detallado de cartas
 router.get('/:code/card-history', (req, res) => {
     try {
         const { code } = req.params;
@@ -773,7 +1447,8 @@ router.get('/:code/card-history', (req, res) => {
             gameStartTime: round.gameStartTime || null,
             lastCardTime: round.lastCardTime || null,
             winners: round.winners || [],
-            winnerCount: round.winners ? round.winners.length : 0
+            winnerCount: round.winners ? round.winners.length : 0,
+            maxCards: MAX_CARDS
         });
         
     } catch (error) {
@@ -782,7 +1457,7 @@ router.get('/:code/card-history', (req, res) => {
     }
 });
 
-// MODIFICADO: Endpoint específico para obtener ganadores (sin límite)
+// Endpoint para obtener ganadores
 router.get('/:code/winners', (req, res) => {
     try {
         const { code } = req.params;
@@ -820,7 +1495,7 @@ router.get('/:code/winners', (req, res) => {
     }
 });
 
-// NUEVO: Endpoint para obtener estado detallado del ganador (compatibilidad)
+// Endpoint para obtener estado detallado del ganador (compatibilidad)
 router.get('/:code/winner', (req, res) => {
     try {
         const { code } = req.params;
@@ -839,7 +1514,6 @@ router.get('/:code/winner', (req, res) => {
             });
         }
         
-        // Devolver información del primer ganador para compatibilidad
         const firstWinner = round.winners[0];
         
         res.json({
@@ -850,7 +1524,6 @@ router.get('/:code/winner', (req, res) => {
             totalPlayers: round.players.length,
             gameDuration: firstWinner.winnerTime && round.gameStartTime ? 
                 firstWinner.winnerTime - round.gameStartTime : null,
-            // Información adicional de múltiples ganadores
             allWinners: round.winners,
             winnerCount: round.winners.length,
             maxWinners: round.maxWinners || 999,
@@ -866,132 +1539,18 @@ router.get('/:code/winner', (req, res) => {
     }
 });
 
-// NUEVO: Endpoint para obtener estadísticas de la partida
-router.get('/:code/stats', (req, res) => {
-    try {
-        const { code } = req.params;
-        const round = rounds.find(r => r.code === code);
-        
-        if (!round) {
-            return res.status(404).json({ error: 'Partida no encontrada' });
-        }
-        
-        const winners = round.winners || [];
-        const totalCards = round.calledNumbers ? round.calledNumbers.length : 0;
-        const gameDuration = round.gameStartTime && round.gameFinishedTime ? 
-            round.gameFinishedTime - round.gameStartTime : null;
-        
-        res.json({
-            code: round.code,
-            gameStats: {
-                totalPlayers: round.players.length,
-                maxPlayers: round.maxPlayers,
-                totalWinners: winners.length,
-                maxWinners: round.maxWinners || 999,
-                totalCardsCalled: totalCards,
-                maxCards: round.totalCardsAvailable || 24,
-                cardsRemaining: (round.totalCardsAvailable || 24) - totalCards,
-                gameStatus: round.status,
-                gameState: round.gameState,
-                autoEndOnWinners: round.autoEndOnWinners || false
-            },
-            timeStats: {
-                createdAt: round.createdAt,
-                gameStartTime: round.gameStartTime,
-                gameFinishedTime: round.gameFinishedTime,
-                gameDuration: gameDuration,
-                lastCardTime: round.lastCardTime,
-                averageCardInterval: round.cardHistory && round.cardHistory.length > 1 ? 
-                    calculateAverageCardInterval(round.cardHistory) : null
-            },
-            winnerStats: winners.map(w => ({
-                position: w.position,
-                positionText: getPositionText(w.position),
-                playerName: w.playerName,
-                winnerTime: w.winnerTime,
-                cardsAtWin: w.totalCardsAtWin,
-                timeToWin: w.winnerTime && round.gameStartTime ? 
-                    w.winnerTime - round.gameStartTime : null
-            })),
-            boardStats: {
-                totalBoards: round.boards.length,
-                assignedBoards: round.takenBoards.length,
-                availableBoards: round.boards.length - round.takenBoards.length
-            }
-        });
-        
-    } catch (error) {
-        console.error('❌ Error getting game stats:', error);
-        res.status(500).json({ error: 'Error interno del servidor' });
-    }
-});
-
-// NUEVO: Endpoint para reiniciar partida (solo para testing/desarrollo)
-router.post('/:code/reset', (req, res) => {
-    try {
-        const { code } = req.params;
-        const { hostEmail, confirm } = req.body;
-        
-        if (!confirm) {
-            return res.status(400).json({ error: 'Debes confirmar el reinicio de la partida' });
-        }
-        
-        const round = rounds.find(r => r.code === code);
-        if (!round) {
-            return res.status(404).json({ error: 'Partida no encontrada' });
-        }
-        
-        if (round.hostEmail !== hostEmail) {
-            return res.status(403).json({ error: 'Solo el host puede reiniciar la partida' });
-        }
-        
-        // Reiniciar estado del juego manteniendo jugadores
-        round.status = 'waiting';
-        round.gameState = 'lobby';
-        round.winners = [];
-        round.winnerCount = 0;
-        round.calledNumbers = [];
-        round.currentNumber = null;
-        round.cardHistory = [];
-        round.lastCardTime = null;
-        round.gameStartTime = null;
-        round.gameFinishedTime = null;
-        round.endTime = null;
-        round.endReason = null;
-        round.autoEndOnWinners = false;
-        
-        // Limpiar marcas de jugadores
-        round.players.forEach(player => {
-            player.markedNumbers = [];
-        });
-        
-        console.log(`🔄 Partida ${code} reiniciada por ${hostEmail}`);
-        
-        res.json({ 
-            success: true, 
-            message: 'Partida reiniciada correctamente',
-            playerCount: round.players.length,
-            autoEndOnWinners: round.autoEndOnWinners
-        });
-        
-    } catch (error) {
-        console.error('❌ Error resetting round:', error);
-        res.status(500).json({ error: 'Error interno del servidor' });
-    }
-});
-
-// Función auxiliar para verificar bingo - sin cambios
-function verifyBingo(markedTiles, playerBoard, calledNumbers, playerData = {}) {
-    console.log("=== VERIFICANDO BINGO ===");
+// NUEVA FUNCIÓN: Verificar bingo para tableros 4x4
+function verifyBingo4x4(markedTiles, playerBoard, calledNumbers, playerData = {}) {
+    console.log("=== VERIFICANDO BINGO 4x4 ===");
     console.log("Jugador:", playerData.playerName || "Desconocido");
     console.log("Tablero del jugador:", playerBoard);
     console.log("Tiles marcados:", markedTiles);
     console.log("Cartas llamadas:", calledNumbers);
     
-    // Convertir tablero 3x3 a array plano para comparar con markedTiles
+    // ACTUALIZADO: Convertir tablero 4x4 a array plano para comparar con markedTiles
     const boardFlat = [];
-    for (let row = 0; row < 3; row++) {
-        for (let col = 0; col < 3; col++) {
+    for (let row = 0; row < 4; row++) {
+        for (let col = 0; col < 4; col++) {
             boardFlat.push(playerBoard[row][col]);
         }
     }
@@ -1017,7 +1576,7 @@ function verifyBingo(markedTiles, playerBoard, calledNumbers, playerData = {}) {
         };
     }
     
-    // PASO 2: Verificar que el jugador haya marcado TODAS las casillas
+    // PASO 2: Verificar que el jugador haya marcado TODAS las casillas (16 para 4x4)
     const unmarkedTiles = [];
     for (let i = 0; i < markedTiles.length; i++) {
         if (!markedTiles[i]) {
@@ -1063,18 +1622,18 @@ function verifyBingo(markedTiles, playerBoard, calledNumbers, playerData = {}) {
     }
     
     // PASO 4: ¡BINGO VÁLIDO!
-    console.log("✅ ¡BINGO VÁLIDO! Todas las verificaciones pasaron");
+    console.log("✅ ¡BINGO VÁLIDO! Todas las verificaciones pasaron (tablero 4x4)");
     return {
         valid: true,
-        reason: 'complete_board',
+        reason: 'complete_board_4x4',
         message: '¡Felicidades! ¡Ganaste el BINGO!',
         completedAt: new Date(),
         boardNumbers: boardFlat,
-        totalCardsInBoard: boardFlat.length
+        totalCardsInBoard: BOARD_SIZE
     };
 }
 
-// NUEVA FUNCIÓN: Obtener texto de posición
+// Función para obtener texto de posición
 function getPositionText(position) {
     switch(position) {
         case 1: return "primer";
@@ -1084,21 +1643,6 @@ function getPositionText(position) {
         case 5: return "quinto";
         default: return position + "°";
     }
-}
-
-// NUEVA FUNCIÓN: Calcular intervalo promedio entre cartas
-function calculateAverageCardInterval(cardHistory) {
-    if (!cardHistory || cardHistory.length < 2) {
-        return null;
-    }
-    
-    let totalInterval = 0;
-    for (let i = 1; i < cardHistory.length; i++) {
-        const interval = new Date(cardHistory[i].timestamp) - new Date(cardHistory[i-1].timestamp);
-        totalInterval += interval;
-    }
-    
-    return Math.round(totalInterval / (cardHistory.length - 1)); // Promedio en milisegundos
 }
 
 module.exports = router;
