@@ -709,17 +709,42 @@ const PREDEFINED_BOARDS_4X4 = [
     ]
 ];
 
-// ACTUALIZADO: Constantes para 54 cartas y 100 tableros
+// ✅ OPTIMIZACIÓN: Constantes para 54 cartas y 100 jugadores
 const MAX_CARDS = 54;
 const MAX_BOARDS = 100;
 const BOARD_SIZE = 16; // 4x4
 const TRIGGER_CARD = 55; // Carta especial para trigger (fuera del rango normal)
 
+// ✅ OPTIMIZACIÓN: Limpiar partidas viejas automáticamente
+function cleanupOldRounds() {
+    const now = new Date();
+    const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+    
+    const initialCount = rounds.length;
+    rounds = rounds.filter(round => {
+        // Mantener partidas activas o recientes
+        if (round.status === 'active') return true;
+        if (round.createdAt > oneHourAgo) return true;
+        
+        // Eliminar partidas viejas terminadas
+        return false;
+    });
+    
+    const removedCount = initialCount - rounds.length;
+    if (removedCount > 0) {
+        console.log(`🧹 Limpieza: ${removedCount} partidas viejas eliminadas`);
+    }
+}
+
+// Ejecutar limpieza cada 30 minutos
+setInterval(cleanupOldRounds, 30 * 60 * 1000);
+
 router.post('/create', async (req, res) => {
     try {
-        const { code, hostEmail, hostPassword, maxPlayers = 10, maxWinners = 999 } = req.body;
+        // ✅ CAMBIO: Aumentar maxPlayers por defecto a 100
+        const { code, hostEmail, hostPassword, maxPlayers = 100, maxWinners = 999 } = req.body;
         
-        console.log(`🎯 Creando partida: ${code} para ${hostEmail} (54 cartas, 100 tableros)`);
+        console.log(`🎯 Creando partida: ${code} para ${hostEmail} (54 cartas, 100 tableros, ${maxPlayers} jugadores)`);
         
         // Validar que se proporcione un código
         if (!code) {
@@ -747,13 +772,13 @@ router.post('/create', async (req, res) => {
             return res.status(400).json({ error: 'Ya tienes una partida activa' });
         }
         
-        // ACTUALIZADO: Crear nueva partida para 54 cartas y 100 tableros
+        // ✅ CAMBIO: Crear nueva partida para hasta 100 jugadores
         const newRound = {
             code: code,
             hostEmail: hostEmail,
             createdAt: new Date(),
             status: 'waiting', // waiting, active, finished
-            maxPlayers: Math.min(maxPlayers, 10),
+            maxPlayers: Math.min(maxPlayers, 100), // ✅ CAMBIO: de 10 a 100
             players: [],
             host: {
                 email: hostEmail,
@@ -794,7 +819,7 @@ router.post('/create', async (req, res) => {
             }
         }
         
-        console.log(`✅ Partida creada con código: ${code} por ${hostEmail} (54 cartas, 100 tableros 4x4)`);
+        console.log(`✅ Partida creada con código: ${code} por ${hostEmail} (54 cartas, 100 tableros 4x4, max ${newRound.maxPlayers} jugadores)`);
         res.json({ 
             success: true, 
             message: 'Partida creada correctamente',
@@ -817,6 +842,7 @@ router.post('/create', async (req, res) => {
 
 router.get('/list', (req, res) => {
     try {
+        // ✅ OPTIMIZACIÓN: Respuesta más ligera para listar partidas
         const safeRounds = rounds.map(r => ({
             code: r.code,
             createdAt: r.createdAt,
@@ -825,7 +851,6 @@ router.get('/list', (req, res) => {
             maxPlayers: r.maxPlayers,
             gameState: r.gameState,
             hostEmail: r.hostEmail,
-            winners: r.winners || [],
             winnerCount: r.winners ? r.winners.length : 0,
             maxWinners: r.maxWinners || 999,
             autoEndOnWinners: r.autoEndOnWinners || false,
@@ -922,8 +947,8 @@ router.post('/:code/join', (req, res) => {
             }
         }
         
-        // Validar que el índice del tablero sea válido
-        if (boardIndex < 0 || boardIndex >= round.boards.length) {
+        // ✅ CAMBIO: Validar que el índice del tablero sea válido para 100 tableros
+        if (boardIndex < 0 || boardIndex >= 100) {
             return res.status(400).json({ error: 'Índice de tablero inválido' });
         }
         
@@ -946,7 +971,7 @@ router.post('/:code/join', (req, res) => {
         round.players.push(newPlayer);
         round.takenBoards.push(boardIndex); // Marcar tablero como ocupado
         
-        console.log(`👤 Jugador ${playerName} se unió a la partida ${code} con tablero ${boardIndex}`);
+        console.log(`👤 Jugador ${playerName} se unió a la partida ${code} con tablero ${boardIndex} (${round.players.length}/${round.maxPlayers})`);
         res.json({ 
             success: true, 
             message: 'Te has unido a la partida correctamente',
@@ -975,8 +1000,9 @@ router.post('/:code/start', (req, res) => {
             return res.status(403).json({ error: 'Solo el host puede iniciar la partida' });
         }
         
-        if (round.players.length < 3) {
-            return res.status(400).json({ error: 'Se necesitan al menos 3 jugadores para comenzar' });
+        // ✅ CAMBIO: Reducir mínimo de jugadores de 3 a 1 para facilitar las pruebas
+        if (round.players.length < 1) {
+            return res.status(400).json({ error: 'Se necesita al menos 1 jugador para comenzar' });
         }
         
         round.status = 'active';
@@ -1028,7 +1054,7 @@ router.get('/:code/boards', (req, res) => {
     }
 });
 
-// Endpoint para que el host vea jugadores en tiempo real
+// ✅ OPTIMIZACIÓN: Endpoint optimizado para 100 jugadores
 router.get('/:code/players', (req, res) => {
     try {
         const { code } = req.params;
@@ -1038,18 +1064,21 @@ router.get('/:code/players', (req, res) => {
             return res.status(404).json({ error: 'Partida no encontrada' });
         }
         
+        // ✅ OPTIMIZACIÓN: Solo datos esenciales para 100 jugadores
         res.json({
             code: round.code,
             status: round.status,
             gameState: round.gameState,
             playerCount: round.players.length,
             maxPlayers: round.maxPlayers,
+            // Solo nombres y tablero, sin data completa del tablero
             players: round.players.map(p => ({
                 name: p.name,
                 joinedAt: p.joinedAt,
                 boardIndex: p.boardIndex
+                // NO enviar p.board para ahorrar ancho de banda
             })),
-            canStart: round.players.length >= 3
+            canStart: round.players.length >= 1 // ✅ CAMBIO: de 3 a 1
         });
     } catch (error) {
         console.error('❌ Error getting players:', error);
@@ -1094,6 +1123,11 @@ router.post('/:code/call-card', (req, res) => {
                 isTrigger: true,
                 description: `Trigger para mostrar carta ${MAX_CARDS} en CardDisplayScene`
             });
+            
+            // ✅ OPTIMIZACIÓN: Limitar historial a últimas 100 entradas
+            if (round.cardHistory.length > 100) {
+                round.cardHistory = round.cardHistory.slice(-100);
+            }
             
             console.log(`✅ Trigger ${TRIGGER_CARD} procesado - CardDisplayScene debería mostrar carta ${MAX_CARDS}`);
             
@@ -1148,6 +1182,11 @@ router.post('/:code/call-card', (req, res) => {
             isTrigger: false
         });
         
+        // ✅ OPTIMIZACIÓN: Limitar historial a últimas 100 entradas
+        if (round.cardHistory.length > 100) {
+            round.cardHistory = round.cardHistory.slice(-100);
+        }
+        
         // Iniciar automáticamente al llamar primera carta
         if (round.status === 'waiting' && round.calledNumbers.length === 1) {
             round.status = 'active';
@@ -1187,7 +1226,7 @@ router.post('/:code/call-card', (req, res) => {
     }
 });
 
-// ACTUALIZADO: Estado del juego con soporte para 54 cartas
+// ✅ OPTIMIZACIÓN: Estado del juego optimizado para 100 jugadores
 router.get('/:code/status', (req, res) => {
     try {
         const { code } = req.params;
@@ -1197,55 +1236,29 @@ router.get('/:code/status', (req, res) => {
             return res.status(404).json({ error: 'Partida no encontrada' });
         }
         
+        // ✅ OPTIMIZACIÓN: Respuesta más ligera para 100 jugadores
         const gameStatus = {
             code: round.code,
             status: round.status,
             gameState: round.gameState,
             
-            // ACTUALIZADO: Información de cartas para 54 cartas
+            // Solo datos esenciales
             calledNumbers: round.calledNumbers || [],
             currentNumber: round.currentNumber || null,
             totalCalled: round.calledNumbers ? round.calledNumbers.length : 0,
-            maxNumbers: MAX_CARDS,
-            remainingCards: MAX_CARDS - (round.calledNumbers ? round.calledNumbers.length : 0),
-            lastCardTime: round.lastCardTime || null,
             
-            // Información del trigger
-            triggerSent: round.currentNumber === TRIGGER_CARD,
-            triggerFor: round.currentNumber === TRIGGER_CARD ? MAX_CARDS : null,
-            
-            // Información de tiempo
-            createdAt: round.createdAt,
-            gameStartTime: round.gameStartTime || null,
-            gameFinishedTime: round.gameFinishedTime || null,
-            
-            // Información de jugadores
+            // Información mínima de jugadores (no enviar tableros completos)
             playerCount: round.players.length,
             maxPlayers: round.maxPlayers,
             
-            // Sistema de ganadores
+            // Ganadores
             winners: round.winners || [],
             winnerCount: round.winners ? round.winners.length : 0,
-            maxWinners: round.maxWinners || 999,
-            allowMultipleWinners: round.allowMultipleWinners !== false,
-            autoEndOnWinners: round.autoEndOnWinners || false,
             
-            // Compatibilidad
-            winner: round.winners && round.winners.length > 0 ? round.winners[0].playerName : null,
-            winnerTime: round.winners && round.winners.length > 0 ? round.winners[0].winnerTime : null,
-            winnerData: round.winners && round.winners.length > 0 ? round.winners[0] : null,
-            
-            // ACTUALIZADO: Estado del juego para 54 cartas
-            allCardsCalled: (round.calledNumbers ? round.calledNumbers.length : 0) >= MAX_CARDS,
-            canCallMoreCards: (round.calledNumbers ? round.calledNumbers.length : 0) < MAX_CARDS && round.status !== 'finished',
-            gameFinished: round.status === 'finished',
-            waitingForHostToEnd: round.status === 'active' && round.winners && round.winners.length > 0
+            // Estados del juego
+            allCardsCalled: (round.calledNumbers ? round.calledNumbers.length : 0) >= 54,
+            gameFinished: round.status === 'finished'
         };
-        
-        // Agregar historial si se solicita
-        if (req.query.includeHistory === 'true') {
-            gameStatus.cardHistory = round.cardHistory || [];
-        }
         
         res.json(gameStatus);
         
