@@ -739,12 +739,12 @@ function cleanupOldRounds() {
 // Ejecutar limpieza cada 30 minutos
 setInterval(cleanupOldRounds, 30 * 60 * 1000);
 
+// 1. MODIFICAR la creación de partida para incluir shuffledCards
 router.post('/create', async (req, res) => {
     try {
-        // ✅ CAMBIO: Aumentar maxPlayers por defecto a 100
         const { code, hostEmail, hostPassword, maxPlayers = 100, maxWinners = 999 } = req.body;
         
-        console.log(`🎯 Creando partida: ${code} para ${hostEmail} (54 cartas, 100 tableros, ${maxPlayers} jugadores)`);
+        console.log(`🎯 Creando partida: ${code} para ${hostEmail}`);
         
         // Validar que se proporcione un código
         if (!code) {
@@ -772,40 +772,39 @@ router.post('/create', async (req, res) => {
             return res.status(400).json({ error: 'Ya tienes una partida activa' });
         }
         
-        // ✅ CAMBIO: Crear nueva partida para hasta 100 jugadores
         const newRound = {
             code: code,
             hostEmail: hostEmail,
             createdAt: new Date(),
-            status: 'waiting', // waiting, active, finished
-            maxPlayers: Math.min(maxPlayers, 100), // ✅ CAMBIO: de 10 a 100
+            status: 'waiting',
+            maxPlayers: Math.min(maxPlayers, 100),
             players: [],
             host: {
                 email: hostEmail,
                 joinedAt: new Date()
             },
-            // ACTUALIZADO: Usar tableros 4x4 con 100 opciones
             boards: PREDEFINED_BOARDS_4X4.slice(0, MAX_BOARDS),
             takenBoards: [],
             calledNumbers: [],
-            currentNumber: null,
             
-            // Sistema de ganadores
+            // ✅ NUEVO: Campo para orden de cartas
+            shuffledCards: [],  // Array de 54 cartas en orden específico
+            shuffleTimestamp: null,  // Cuándo se barajaron
+            cardOrder: null,  // Orden establecido por el host
+            
+            currentNumber: null,
             winners: [],
             maxWinners: 999,
             winnerCount: 0,
             allowMultipleWinners: true,
             gameFinishedTime: null,
             autoEndOnWinners: false,
-            
-            // ACTUALIZADO: Campos para 54 cartas
             lastCardTime: null,
             cardHistory: [],
             totalCardsAvailable: MAX_CARDS,
             maxCards: MAX_CARDS,
             gameStartTime: null,
-            
-            gameState: 'lobby' // lobby, playing, paused, ended
+            gameState: 'lobby'
         };
         
         rounds.push(newRound);
@@ -826,16 +825,73 @@ router.post('/create', async (req, res) => {
             code: code,
             roundId: rounds.length - 1,
             maxPlayers: newRound.maxPlayers,
-            maxWinners: newRound.maxWinners,
             maxCards: MAX_CARDS,
-            maxBoards: MAX_BOARDS,
-            boardSize: BOARD_SIZE,
-            autoEndOnWinners: newRound.autoEndOnWinners,
-            boards: newRound.boards.length
+            // ✅ NUEVO: Indicar que el orden debe ser enviado
+            needsCardOrder: true,
+            shuffledCards: []  // Vacío al crear
         });
         
     } catch (error) {
         console.error('❌ Error creating round:', error);
+        res.status(500).json({ error: 'Error interno del servidor' });
+    }
+});
+
+// 2. NUEVO ENDPOINT: Enviar orden de cartas barajeadas
+router.post('/:code/shuffle', (req, res) => {
+    try {
+        const { code } = req.params;
+        const { hostEmail, shuffledCards } = req.body;
+        
+        console.log(`🎲 Recibiendo orden de cartas para partida ${code}`);
+        
+        const round = rounds.find(r => r.code === code);
+        if (!round) {
+            return res.status(404).json({ error: 'Partida no encontrada' });
+        }
+        
+        if (round.hostEmail !== hostEmail) {
+            return res.status(403).json({ error: 'Solo el host puede establecer el orden de cartas' });
+        }
+        
+        // Validar que se envíen exactamente 54 cartas
+        if (!shuffledCards || shuffledCards.length !== MAX_CARDS) {
+            return res.status(400).json({ 
+                error: `Debe enviar exactamente ${MAX_CARDS} cartas`,
+                received: shuffledCards ? shuffledCards.length : 0
+            });
+        }
+        
+        // Validar que contenga todas las cartas del 1 al 54
+        const expectedCards = Array.from({length: MAX_CARDS}, (_, i) => i + 1);
+        const sortedReceived = [...shuffledCards].sort((a, b) => a - b);
+        
+        for (let i = 0; i < MAX_CARDS; i++) {
+            if (expectedCards[i] !== sortedReceived[i]) {
+                return res.status(400).json({ 
+                    error: 'Las cartas deben ser exactamente del 1 al 54, sin duplicados' 
+                });
+            }
+        }
+        
+        // Guardar el orden de cartas
+        round.shuffledCards = shuffledCards.slice(); // Copia del array
+        round.shuffleTimestamp = new Date();
+        round.cardOrder = 'host_defined';
+        
+        console.log(`✅ Orden de cartas guardado para partida ${code}`);
+        console.log(`📊 Primeras 10 cartas: ${shuffledCards.slice(0, 10).join(', ')}`);
+        
+        res.json({ 
+            success: true, 
+            message: 'Orden de cartas guardado correctamente',
+            shuffledCards: round.shuffledCards,
+            shuffleTimestamp: round.shuffleTimestamp,
+            totalCards: round.shuffledCards.length
+        });
+        
+    } catch (error) {
+        console.error('❌ Error setting card order:', error);
         res.status(500).json({ error: 'Error interno del servidor' });
     }
 });
@@ -865,6 +921,7 @@ router.get('/list', (req, res) => {
     }
 });
 
+// 5. MODIFICAR endpoint de información de partida
 router.get('/:code', (req, res) => {
     try {
         const { code } = req.params;
@@ -894,7 +951,12 @@ router.get('/:code', (req, res) => {
             autoEndOnWinners: round.autoEndOnWinners || false,
             totalCalled: round.calledNumbers ? round.calledNumbers.length : 0,
             currentNumber: round.currentNumber || null,
-            maxCards: MAX_CARDS
+            maxCards: MAX_CARDS,
+            
+            // ✅ NUEVO: Info del orden de cartas
+            hasCardOrder: round.shuffledCards && round.shuffledCards.length === MAX_CARDS,
+            shuffleTimestamp: round.shuffleTimestamp || null,
+            cardOrder: round.cardOrder || null
         });
     } catch (error) {
         console.error('❌ Error getting round:', error);
@@ -1226,7 +1288,7 @@ router.post('/:code/call-card', (req, res) => {
     }
 });
 
-// ✅ OPTIMIZACIÓN: Estado del juego optimizado para 100 jugadores
+// 3. MODIFICAR endpoint de estado para incluir shuffledCards
 router.get('/:code/status', (req, res) => {
     try {
         const { code } = req.params;
@@ -1236,18 +1298,23 @@ router.get('/:code/status', (req, res) => {
             return res.status(404).json({ error: 'Partida no encontrada' });
         }
         
-        // ✅ OPTIMIZACIÓN: Respuesta más ligera para 100 jugadores
         const gameStatus = {
             code: round.code,
             status: round.status,
             gameState: round.gameState,
             
-            // Solo datos esenciales
+            // Datos de cartas
             calledNumbers: round.calledNumbers || [],
             currentNumber: round.currentNumber || null,
             totalCalled: round.calledNumbers ? round.calledNumbers.length : 0,
             
-            // Información mínima de jugadores (no enviar tableros completos)
+            // ✅ NUEVO: Incluir orden de cartas
+            shuffledCards: round.shuffledCards || [],
+            shuffleTimestamp: round.shuffleTimestamp || null,
+            cardOrder: round.cardOrder || null,
+            hasCardOrder: round.shuffledCards && round.shuffledCards.length === MAX_CARDS,
+            
+            // Info de jugadores
             playerCount: round.players.length,
             maxPlayers: round.maxPlayers,
             
@@ -1256,7 +1323,7 @@ router.get('/:code/status', (req, res) => {
             winnerCount: round.winners ? round.winners.length : 0,
             
             // Estados del juego
-            allCardsCalled: (round.calledNumbers ? round.calledNumbers.length : 0) >= 54,
+            allCardsCalled: (round.calledNumbers ? round.calledNumbers.length : 0) >= MAX_CARDS,
             gameFinished: round.status === 'finished'
         };
         
@@ -1264,6 +1331,33 @@ router.get('/:code/status', (req, res) => {
         
     } catch (error) {
         console.error('❌ Error getting game status:', error);
+        res.status(500).json({ error: 'Error interno del servidor' });
+    }
+});
+
+// 4. NUEVO ENDPOINT: Obtener solo el orden de cartas
+router.get('/:code/card-order', (req, res) => {
+    try {
+        const { code } = req.params;
+        const round = rounds.find(r => r.code === code);
+        
+        if (!round) {
+            return res.status(404).json({ error: 'Partida no encontrada' });
+        }
+        
+        res.json({
+            code: round.code,
+            shuffledCards: round.shuffledCards || [],
+            shuffleTimestamp: round.shuffleTimestamp || null,
+            cardOrder: round.cardOrder || null,
+            hasCardOrder: round.shuffledCards && round.shuffledCards.length === MAX_CARDS,
+            totalCards: round.shuffledCards ? round.shuffledCards.length : 0,
+            calledNumbers: round.calledNumbers || [],
+            totalCalled: round.calledNumbers ? round.calledNumbers.length : 0
+        });
+        
+    } catch (error) {
+        console.error('❌ Error getting card order:', error);
         res.status(500).json({ error: 'Error interno del servidor' });
     }
 });
